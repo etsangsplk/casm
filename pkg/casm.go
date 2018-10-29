@@ -11,8 +11,8 @@ import (
 // Host is a logical machine in a compute cluster.  It acts both as a server and
 // a client.  In the CASM expander-graph model, it is a vertex.
 type Host struct {
+	c context.Context
 	h host.Host
-	k uint8
 }
 
 // New Host whose lifetime is bound to the context c.
@@ -36,3 +36,6 @@ func New(c context.Context, opt ...Option) (h *Host, err error) {
 
 	return
 }
+
+// Context to which the Host is bound
+func (h Host) Context() context.Context { return h.c }
