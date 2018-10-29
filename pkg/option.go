@@ -25,13 +25,13 @@ func (p2pOpt) Opt() {}
 type p2pOptions []libp2p.Option
 
 func defaultP2pOpts() p2pOptions {
-	panic("defaultLibp2pOpts NOT IMPLEMENTED")
+	return []libp2p.Option{}
 }
 
-func (h p2pOptions) Load(opt []Option) {
+func (h *p2pOptions) Load(opt []Option) {
 	for _, o := range opt {
 		if op, ok := o.(p2pOpt); ok {
-			h = append(h, libp2p.Option(op))
+			*h = append(*h, libp2p.Option(op))
 		}
 	}
 }
@@ -58,21 +58,13 @@ func (opt hostOpt) Apply(h *Host) error { return opt(h) }
 type hostOptions []hostOpt
 
 func defaultHostOpts() hostOptions {
-	panic("defaultHostOpts NOT IMPLEMENTED")
+	return []hostOpt{}
 }
 
-func (h hostOptions) Load(opt []Option) {
+func (h *hostOptions) Load(opt []Option) {
 	for _, o := range opt {
 		if op, ok := o.(hostOpt); ok {
-			h = append(h, op)
+			*h = append(*h, op)
 		}
 	}
-}
-
-// Cardinality configures the number of
-func Cardinality(k uint8) Option {
-	return hostOpt(func(h *Host) error {
-		h.k = k
-		return nil
-	})
 }
