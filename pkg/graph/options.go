@@ -1,5 +1,10 @@
 package graph
 
+const (
+	defaultK uint8 = 5
+	defaultL uint8 = 1
+)
+
 // Option type for Vertex
 type Option func(*Vertex) (Option, error)
 
@@ -27,15 +32,15 @@ func OptDefault() Option {
 	return func(v *Vertex) (prev Option, err error) {
 		apply := func(opt ...Option) {
 			for _, o := range opt {
-				if err != nil {
+				if err == nil {
 					prev, err = o(v)
 				}
 			}
 		}
 
 		apply(
-			OptCardinality(5),
-			OptElasticity(1),
+			OptCardinality(defaultK),
+			OptElasticity(defaultL),
 		)
 
 		return

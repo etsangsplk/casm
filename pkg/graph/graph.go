@@ -3,8 +3,6 @@ package graph
 
 import (
 	casm "github.com/lthibault/casm/pkg"
-
-	host "github.com/libp2p/go-libp2p-host"
 )
 
 // Vertex in the expander graph
@@ -14,9 +12,8 @@ type Vertex struct {
 }
 
 // New Vertex
-func New(h host.Host, opt ...Option) (v *Vertex, err error) {
-	v = new(Vertex)
-
+func New(h casm.Host, opt ...Option) (v *Vertex, err error) {
+	v = &Vertex{h: h}
 	for _, o := range append([]Option{OptDefault()}, opt...) {
 		if _, err = o(v); err != nil {
 			break
