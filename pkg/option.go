@@ -50,10 +50,10 @@ func ListenAddrs(addrs ...ma.Multiaddr) Option {
 	CASM Host options
 *************************/
 
-type hostOpt func(*Host) error
+type hostOpt func(*basicHost) error
 
-func (hostOpt) Opt()                    {}
-func (opt hostOpt) Apply(h *Host) error { return opt(h) }
+func (hostOpt) Opt()                         {}
+func (opt hostOpt) Apply(h *basicHost) error { return opt(h) }
 
 type hostOptions []hostOpt
 

@@ -18,7 +18,7 @@ func TestOptionLoaders(t *testing.T) {
 
 	t.Run("casm", func(t *testing.T) {
 		var opt hostOptions
-		o := hostOpt(func(*Host) error { return nil })
+		o := hostOpt(func(*basicHost) error { return nil })
 
 		opt.Load([]Option{o})
 		assert.NotEmpty(t, opt)
