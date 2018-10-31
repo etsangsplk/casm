@@ -5,31 +5,31 @@ const (
 	defaultL uint8 = 1
 )
 
-// Option type for Vertex
-type Option func(*Vertex) (Option, error)
+// Option type for V
+type Option func(*V) (Option, error)
 
-// OptCardinality sets the Vertex cardinality, i.e.: the maximum number of edges
+// OptCardinality sets the V cardinality, i.e.: the maximum number of edges
 func OptCardinality(k uint8) Option {
-	return func(v *Vertex) (prev Option, err error) {
+	return func(v *V) (prev Option, err error) {
 		prev = OptCardinality(v.k)
 		v.k = k
 		return
 	}
 }
 
-// OptElasticity sets the Vertex elasticity, i.e.: the number of edges beyond
+// OptElasticity sets the V elasticity, i.e.: the number of edges beyond
 // its cardinality limit that it can host.
 func OptElasticity(l uint8) Option {
-	return func(v *Vertex) (prev Option, err error) {
+	return func(v *V) (prev Option, err error) {
 		prev = OptElasticity(v.l)
 		v.l = l
 		return
 	}
 }
 
-// OptDefault sets the default options for a Vertex
+// OptDefault sets the default options for a V
 func OptDefault() Option {
-	return func(v *Vertex) (prev Option, err error) {
+	return func(v *V) (prev Option, err error) {
 		apply := func(opt ...Option) {
 			for _, o := range opt {
 				if err == nil {

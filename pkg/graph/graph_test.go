@@ -28,7 +28,7 @@ func TestVertex(t *testing.T) {
 		})
 
 		t.Run("Fail", func(t *testing.T) {
-			o := Option(func(*Vertex) (Option, error) {
+			o := Option(func(*V) (Option, error) {
 				return nil, errors.New("")
 			})
 			_, err := New(h, o)
