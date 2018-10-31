@@ -14,6 +14,10 @@ import (
 
 func init() { rand.Seed(time.Now().UTC().UnixNano()) }
 
+type IDer interface {
+	ID() PeerID
+}
+
 // PeerID is a unique identifier for a Node
 type PeerID uint64
 
