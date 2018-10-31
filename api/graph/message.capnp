@@ -7,5 +7,9 @@ $Go.import("github.com/lthibault/casm/pkg/graph");
 struct Message $Go.doc("Message for broadcast over the graph") {
     id @0 :UInt64;
     seq @1 :UInt64;
-    body @2 :Data;
+    pub :union {
+        none @2 :Void;
+        topic @3 :Data;
+    }
+    body @4 :Data;
 }

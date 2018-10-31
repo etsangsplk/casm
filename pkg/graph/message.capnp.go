@@ -3,6 +3,7 @@
 package graph
 
 import (
+	strconv "strconv"
 	capnp "zombiezen.com/go/capnproto2"
 	text "zombiezen.com/go/capnproto2/encoding/text"
 	schemas "zombiezen.com/go/capnproto2/schemas"
@@ -10,17 +11,36 @@ import (
 
 // Message for broadcast over the graph
 type Message struct{ capnp.Struct }
+type Message_pub Message
+type Message_pub_Which uint16
+
+const (
+	Message_pub_Which_none  Message_pub_Which = 0
+	Message_pub_Which_topic Message_pub_Which = 1
+)
+
+func (w Message_pub_Which) String() string {
+	const s = "nonetopic"
+	switch w {
+	case Message_pub_Which_none:
+		return s[0:4]
+	case Message_pub_Which_topic:
+		return s[4:9]
+
+	}
+	return "Message_pub_Which(" + strconv.FormatUint(uint64(w), 10) + ")"
+}
 
 // Message_TypeID is the unique identifier for the type Message.
 const Message_TypeID = 0xd7bf4580016da0c7
 
 func NewMessage(s *capnp.Segment) (Message, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1})
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 24, PointerCount: 2})
 	return Message{st}, err
 }
 
 func NewRootMessage(s *capnp.Segment) (Message, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1})
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 24, PointerCount: 2})
 	return Message{st}, err
 }
 
@@ -50,18 +70,49 @@ func (s Message) SetSeq(v uint64) {
 	s.Struct.SetUint64(8, v)
 }
 
-func (s Message) Body() ([]byte, error) {
+func (s Message) Pub() Message_pub { return Message_pub(s) }
+
+func (s Message_pub) Which() Message_pub_Which {
+	return Message_pub_Which(s.Struct.Uint16(16))
+}
+func (s Message_pub) SetNone() {
+	s.Struct.SetUint16(16, 0)
+
+}
+
+func (s Message_pub) Topic() ([]byte, error) {
+	if s.Struct.Uint16(16) != 1 {
+		panic("Which() != topic")
+	}
 	p, err := s.Struct.Ptr(0)
 	return []byte(p.Data()), err
 }
 
-func (s Message) HasBody() bool {
+func (s Message_pub) HasTopic() bool {
+	if s.Struct.Uint16(16) != 1 {
+		return false
+	}
 	p, err := s.Struct.Ptr(0)
 	return p.IsValid() || err != nil
 }
 
-func (s Message) SetBody(v []byte) error {
+func (s Message_pub) SetTopic(v []byte) error {
+	s.Struct.SetUint16(16, 1)
 	return s.Struct.SetData(0, v)
+}
+
+func (s Message) Body() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return []byte(p.Data()), err
+}
+
+func (s Message) HasBody() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s Message) SetBody(v []byte) error {
+	return s.Struct.SetData(1, v)
 }
 
 // Message_List is a list of Message.
@@ -69,7 +120,7 @@ type Message_List struct{ capnp.List }
 
 // NewMessage creates a new list of Message.
 func NewMessage_List(s *capnp.Segment, sz int32) (Message_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1}, sz)
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 24, PointerCount: 2}, sz)
 	return Message_List{l}, err
 }
 
@@ -90,24 +141,41 @@ func (p Message_Promise) Struct() (Message, error) {
 	return Message{s}, err
 }
 
-const schema_f9eb5f58886df78d = "x\xda4\x8a\xb1J\xf3`\x18F\x9f\xe7\xfd\xd2\xbf\x14" +
-	"Z\xfa\x07\x0b\x16\x17?\x1c\x0bZ\xba\x89S\x05\x0b\x0a" +
-	"\x16\xfa\x82\x83\x93\xf2\xb5\x89I\x87\x98\x98\x14\xc1\xcdI" +
-	"Dp\xf2\x02\xf4\x0e\xbc\x02q\x12\xef@/\xc2\xc9I" +
-	"\x1cJD\xd4\xed\x9c\xc3\xf9\x7f\xd1\x97^eQ\x00m" +
-	"W\xfe\x95\xcfw\x09\xcf\x07\x8f\xaf\xd06\xa5\xbc\xfeH" +
-	".\xf7\x0f\xdf>Qa\x15\xe8\xbd\x0b\xfdy\xd5\x9f/" +
-	"/\xac\xf2\x1e\xeb\xa5\xcb\xa6\xdd(w\x99\x89\xbbIX" +
-	"\x14.\x0a\xd7&.;\xce6\x86?\x86\x11\xa9\x1e\xa5" +
-	"<\xb8\xb9\xd5\x87\x97\xab'\xa8'\xdc\xb4d\x1d\xe8\xb1" +
-	"\xc3\xf2w\xb4\xe6(\xcd\xed8O]0q\xc5\xcc\xa6" +
-	"\xa7angqh\xa3f\xee\xb2\x18\xd0\xba\xf1\x00\x8f" +
-	"\x80?X\x02\xb4o\xa8\xbbB\x9fl\xf1;\xee\xac\x00" +
-	"\xbae\xa8#!\xa5E\x01\xfca\x07\xd0mC\xdd\x13" +
-	"\x9ai\xc0\x1a\x845\xb0Z\x84'\x7f\xdc\x1c\xa7\xc1\x19" +
-	"\x1b\x106\xc0\xaf\x00\x00\x00\xff\xff\xa4\x04>\xc6"
+func (p Message_Promise) Pub() Message_pub_Promise { return Message_pub_Promise{p.Pipeline} }
+
+// Message_pub_Promise is a wrapper for a Message_pub promised by a client call.
+type Message_pub_Promise struct{ *capnp.Pipeline }
+
+func (p Message_pub_Promise) Struct() (Message_pub, error) {
+	s, err := p.Pipeline.Struct()
+	return Message_pub{s}, err
+}
+
+const schema_f9eb5f58886df78d = "x\xda\x84\x8f?\x8b\x13Q\x14G\x7f\xbf\xfb&;\xbb" +
+	"\xb0!\xfb\x98)T\\v\x08\x16f\xc1\xc4\x18\x0b\xb1" +
+	"\xd2\xc2N\xc1[\x08\x11D}I\xc6\xcc\x80\xc9\x8c3" +
+	"\xa3bg)\x01+\x1b;\xfd\"\xc1J,\xed\xd4o" +
+	"`ae%6>\x09\xfe\xed\xb6\xbb\xf7r\x0f\x87\xb3" +
+	"\xb7\xbe$\xc3V!\x80\x9elm\xf9w\xaf\x17|z" +
+	"\xe5\xcdG\xe81\x1a\xff\xfc\xdb\xe2\xd9\xf8\xce\x97\xefh" +
+	"I\x08\x8c\xf6)\x8cz\x0c\xa3\x1e\x0f\xa2\x9b\xfc\x0c\xfa" +
+	"\xd5\xf8}\xb3\xff\xf5\xe5'hB\xf3\x8f\xbe!!\x85" +
+	"\xdb#+]\x82\xd1qy\x8c\x0b\xde\x95\xf9`^\xb9" +
+	"\xd2d\x83EZ\xd7n\x9e\xf6\xa7\xae\\\x96\x17\xaf\xfd" +
+	"\xdap\x9d\xd4\x80\xe2o\xbfx\xa5\xeb\x0f\xab\xb7\xd0@" +
+	"x9!w\x81!\x0f\xe9\x7f?&\xe6^Q%\x93" +
+	"\xaap\xb3\xa9\xab\x9b\xa4x\x94VI\x93\xa5\xc9\xbcS" +
+	"\xb92\x03t\xcf\x04@@\xc0\xba\x13\x80\xde2\xd4L" +
+	"h\xc9\x98\x9bc\xda\x05\xf4\xae\xa1\xde\x17R\xf8_\x86" +
+	"\xcd\xbb\x10k\x183\x00\xac\x1e\x02z\xd5P\xc7B\x93" +
+	"\xcf\xb8\x03\xe1\x0e\x18\xd6\xe9\x83\xbfs\xf9p\xd2\x99\x14" +
+	"\xb3'lC\xd8\x06\x8f\xcc\xeco\x10\xdd6\xc1\xae\xf7" +
+	"1\x05\xb0\xbd\x8d\xe6\x94\xa1\x9e\x15\xb6\xf9\xc3\xc74\x80" +
+	"=s\x0e\xd0\xd3\x86z^\xd8Y\x16\xcb\x14[\x07M" +
+	"Q\xe6\xd3?\xa6\x9f\x01\x00\x00\xff\xff\x81\xc2lS"
 
 func init() {
 	schemas.Register(schema_f9eb5f58886df78d,
-		0xd7bf4580016da0c7)
+		0xd7bf4580016da0c7,
+		0xd898f11d74cf588a)
 }
