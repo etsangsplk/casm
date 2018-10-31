@@ -7,7 +7,14 @@ import (
 
 	casm "github.com/lthibault/casm/pkg"
 	"github.com/stretchr/testify/assert"
+
+	ma "github.com/multiformats/go-multiaddr"
 )
+
+type mockAddr struct{ casm.IDer }
+
+func (mockAddr) Addrs() []ma.Multiaddr { return []ma.Multiaddr{} }
+func (mockAddr) Label() casm.HostLabel { return "test" }
 
 type mockHost struct {
 	casm.PeerID
@@ -15,7 +22,7 @@ type mockHost struct {
 }
 
 func (h mockHost) Context() context.Context { return h.Ctx }
-func (h mockHost) Addr() casm.Addr          { return nil }
+func (h mockHost) Addr() casm.Addr          { return &mockAddr{casm.NewID()} }
 
 func TestVertex(t *testing.T) {
 	h := &mockHost{Ctx: context.Background()}
