@@ -19,6 +19,12 @@ func TestMessage(t *testing.T) {
 			assert.Equal(t, uint64(1), msg.Sequence())
 		})
 
+		t.Run("PeerID", func(t *testing.T) {
+			msg := f(nil)
+			defer msg.Free()
+			assert.Equal(t, id, msg.ID())
+		})
+
 		t.Run("RefCounter", func(t *testing.T) {
 			msg := f(nil)
 			t.Run("IsSet", func(t *testing.T) {
