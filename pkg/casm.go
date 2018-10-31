@@ -11,7 +11,6 @@ import (
 // Host is a logical machine in a compute cluster.  It acts both as a server and
 // a client.  In the CASM expander-graph model, it is a vertex.
 type Host interface {
-	// ID() PeerID // TODO:  remove (redundant with addr)
 	Addr() Addr
 	Context() context.Context
 }
