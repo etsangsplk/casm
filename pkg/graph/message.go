@@ -84,7 +84,9 @@ func (m *message) Free() {
 	}
 }
 
-func messageFactory(pid casm.PeerID) func([]byte) *message {
+type messageFactory func([]byte) *message
+
+func newMsgFactory(pid casm.PeerID) func([]byte) *message {
 	var seq uint64
 	return func(b []byte) (msg *message) {
 		msg = msgPool.Get().(*message)

@@ -11,7 +11,7 @@ func TestMessage(t *testing.T) {
 	id := casm.NewID()
 
 	t.Run("Factory", func(t *testing.T) {
-		f := messageFactory(id)
+		f := newMsgFactory(id)
 
 		t.Run("FirstSequenceIsOne", func(t *testing.T) {
 			msg := f(nil)

@@ -15,6 +15,7 @@ type mockHost struct {
 }
 
 func (h mockHost) Context() context.Context { return h.Ctx }
+func (h mockHost) Addr() casm.Addr          { return nil }
 
 func TestVertex(t *testing.T) {
 	h := &mockHost{Ctx: context.Background()}

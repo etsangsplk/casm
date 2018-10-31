@@ -35,7 +35,7 @@ func TestHost(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, context.Background(), bh.c)
-			assert.NotZero(t, h.ID)
+			assert.NotZero(t, h.Addr().ID())
 			assert.Equal(t, c, h.Context())
 		})
 
