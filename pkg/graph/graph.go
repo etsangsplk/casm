@@ -2,11 +2,20 @@
 package graph
 
 import (
+	"context"
+
 	casm "github.com/lthibault/casm/pkg"
 )
 
+// compile-time type constraint
+var _ Vertex = &V{}
+
 // Vertex in the expander graph
 type Vertex interface {
+	ID() casm.PeerID
+	Context() context.Context
+	Message() Broadcaster
+	Edge() Neighborhood
 }
 
 // V is a concrete Vertex
@@ -25,4 +34,20 @@ func New(h casm.Host, opt ...Option) (v *V, err error) {
 	}
 
 	return
+}
+
+// ID returns the peer id of the Vertex's underlying host
+func (v V) ID() casm.PeerID { return v.h.ID() }
+
+// Context to which the Vertex's underlying host is bound
+func (v V) Context() context.Context { return v.h.Context() }
+
+// Message provides an interface to broadcast/pubsub functionality
+func (v V) Message() Broadcaster {
+	panic("Message NOT IMPLEMENTED")
+}
+
+// Edge provides an interface for connecting to peeers
+func (v V) Edge() Neighborhood {
+	panic("Edge NOT IMPLEMENTED")
 }
