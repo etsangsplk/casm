@@ -9,7 +9,7 @@ import (
 
 // Option represents a setting
 type Option interface {
-	Opt()
+	opt()
 }
 
 /***************************************
@@ -20,7 +20,7 @@ Adapters for libp2p Host options
 // recognized by New() and passed to libp2p.New().
 type p2pOpt func(*config.Config) error
 
-func (p2pOpt) Opt() {}
+func (p2pOpt) opt() {}
 
 type p2pOptions []libp2p.Option
 
@@ -52,7 +52,7 @@ func ListenAddrs(addrs ...ma.Multiaddr) Option {
 
 type hostOpt func(*basicHost) error
 
-func (hostOpt) Opt()                         {}
+func (hostOpt) opt()                         {}
 func (opt hostOpt) Apply(h *basicHost) error { return opt(h) }
 
 type hostOptions []hostOpt
