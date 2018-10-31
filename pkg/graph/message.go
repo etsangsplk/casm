@@ -9,27 +9,6 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
-// var ( // compile-time type constraints
-// 	_ Message = new(message)
-// 	// _ SubMessage = ...
-// )
-
-// // Message for broadcast over the graph
-// type Message interface {
-// 	ID() casm.PeerID
-// 	Sequence() uint64
-// 	Header() []byte
-// 	Body() []byte
-// 	Ref()
-// 	Free()
-// }
-
-// // SubMessage is a message for a subscription
-// type SubMessage interface {
-// 	Message
-// 	Topic() []byte
-// }
-
 var msgPool = sync.Pool{New: func() interface{} {
 	var err error
 	msg := new(message)
