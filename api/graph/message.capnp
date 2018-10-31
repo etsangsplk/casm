@@ -2,7 +2,7 @@
 using Go = import "/go.capnp";
 @0xf9eb5f58886df78d;
 $Go.package("graph");
-$Go.import("github.com/lthibault/casm/pkg/graph");
+$Go.import("github.com/lthibault/casm/api/graph");
 
 struct Message $Go.doc("Message for broadcast over the graph") {
     id @0 :UInt64;
