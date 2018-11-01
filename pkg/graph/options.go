@@ -27,13 +27,6 @@ func OptElasticity(l uint8) Option {
 	}
 }
 
-// // OptExtensions registers extensions to the Vertex
-// func OptExtensions(ext ...casm.Handler) Option {
-// 	return func(v *V) (err error) {
-
-// 	}
-// }
-
 // OptDefault sets the default options for a V
 func OptDefault() Option {
 	return func(v *V) (err error) {
