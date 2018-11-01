@@ -5,6 +5,9 @@ import (
 
 	libp2p "github.com/libp2p/go-libp2p"
 	host "github.com/libp2p/go-libp2p-host"
+	net "github.com/libp2p/go-libp2p-net"
+	peer "github.com/libp2p/go-libp2p-peer"
+	protocol "github.com/libp2p/go-libp2p-protocol"
 	"github.com/pkg/errors"
 )
 
@@ -15,7 +18,7 @@ type Host interface {
 	Context() context.Context
 	RegisterStreamHandler(string, Handler)
 	UnregisterStreamHandler(string)
-	OpenStream(context.Context, Addr, string) Stream
+	OpenStream(context.Context, Addr, string) (Stream, error)
 }
 
 type basicHost struct {
@@ -52,20 +55,31 @@ func New(c context.Context, opt ...Option) (Host, error) {
 }
 
 // Context to which the Host is bound
-func (h basicHost) Context() context.Context { return h.c }
-func (h basicHost) Addr() Addr               { return h.a }
+func (bh basicHost) Context() context.Context { return bh.c }
+func (bh basicHost) Addr() Addr               { return bh.a }
 
 // RegisterStreamHandler
-func (h basicHost) RegisterStreamHandler(string, Handler) {
-	panic("RegisterStreamHandler NOT IMPLEMENTED")
+func (bh basicHost) RegisterStreamHandler(path string, h Handler) {
+	bh.h.SetStreamHandler(protocol.ID(path), func(s net.Stream) {
+		strm := newStream(bh.c, s)
+		defer strm.Close()
+		h.ServeStream(strm)
+	})
 }
 
 // UnregisterStreamHandler
-func (h basicHost) UnregisterStreamHandler(string) {
-	panic("UnregisterStreamHandler NOT IMPLEMENTED")
+func (bh basicHost) UnregisterStreamHandler(path string) {
+	bh.h.RemoveStreamHandler(protocol.ID(path))
 }
 
 // OpenStream
-func (h basicHost) OpenStream(c context.Context, a Addr, path string) Stream {
-	panic("OpenStream NOT IMPLEMENTED")
+func (bh basicHost) OpenStream(c context.Context, a Addr, path string) (Stream, error) {
+	s, err := bh.h.NewStream(c, peer.ID(a.Label()), protocol.ID(path))
+	if err != nil {
+		return nil, errors.Wrap(err, "libp2p")
+	}
+
+	// pass host's context because context `c` is the stream-open context.  It
+	// may contain timeouts.
+	return newStream(bh.c, s), nil
 }
