@@ -39,6 +39,11 @@ func (id PeerID) ID() PeerID { return id }
 // Use PeerID instead.
 type HostLabel string
 
+// Addresser can provide an Addr
+type Addresser interface {
+	Addr() Addr
+}
+
 // Addr of a Host
 type Addr interface {
 	IDer

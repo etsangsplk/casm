@@ -18,7 +18,7 @@ type Host interface {
 	Context() context.Context
 	RegisterStreamHandler(string, Handler)
 	UnregisterStreamHandler(string)
-	OpenStream(context.Context, Addr, string) (Stream, error)
+	OpenStream(context.Context, Addresser, string) (Stream, error)
 }
 
 type basicHost struct {
@@ -73,8 +73,8 @@ func (bh basicHost) UnregisterStreamHandler(path string) {
 }
 
 // OpenStream
-func (bh basicHost) OpenStream(c context.Context, a Addr, path string) (Stream, error) {
-	s, err := bh.h.NewStream(c, peer.ID(a.Label()), protocol.ID(path))
+func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Stream, error) {
+	s, err := bh.h.NewStream(c, peer.ID(a.Addr().Label()), protocol.ID(path))
 	if err != nil {
 		return nil, errors.Wrap(err, "libp2p")
 	}
