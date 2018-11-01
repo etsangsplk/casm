@@ -28,8 +28,11 @@ type V struct {
 // New V
 func New(h casm.Host, opt ...Option) (v *V, err error) {
 	v = &V{h: h, b: newBroadcaster(h.Addr())}
+
+	v.h.RegisterStreamHandler(pathEdge, casm.HandlerFunc(v.handleEdge))
+
 	for _, o := range append([]Option{OptDefault()}, opt...) {
-		if _, err = o(v); err != nil {
+		if err = o(v); err != nil {
 			break
 		}
 	}
@@ -57,4 +60,8 @@ func (v V) Lease(a casm.Addr) {
 // Evict the specified peer from the vertex, closing all connections
 func (v V) Evict(id casm.IDer) {
 	panic("Evict NOT IMPLEMENTED")
+}
+
+func (v V) handleEdge(s casm.Stream) {
+	panic("handleEdge NOT IMPLEMENTED")
 }
