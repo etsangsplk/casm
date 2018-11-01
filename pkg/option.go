@@ -36,13 +36,13 @@ func (h *p2pOptions) Load(opt []Option) {
 	}
 }
 
-// ListenAddrStrings configures the CASM host to listen on the given multiaddrs
-func ListenAddrStrings(s ...string) Option {
+// OptListenAddrStrings configures the CASM host to listen on the given multiaddrs
+func OptListenAddrStrings(s ...string) Option {
 	return p2pOpt(libp2p.ListenAddrStrings(s...))
 }
 
-// ListenAddrs configures the CASM host to listen on the given multiaddrs
-func ListenAddrs(addrs ...ma.Multiaddr) Option {
+// OptListenAddrs configures the CASM host to listen on the given multiaddrs
+func OptListenAddrs(addrs ...ma.Multiaddr) Option {
 	return p2pOpt(libp2p.ListenAddrs(addrs...))
 }
 
