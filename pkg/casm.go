@@ -13,6 +13,9 @@ import (
 type Host interface {
 	Addr() Addr
 	Context() context.Context
+	RegisterStreamHandler(string, Handler)
+	UnregisterStreamHandler(string)
+	OpenStream(context.Context, Addr, string) Stream
 }
 
 type basicHost struct {
@@ -51,3 +54,18 @@ func New(c context.Context, opt ...Option) (Host, error) {
 // Context to which the Host is bound
 func (h basicHost) Context() context.Context { return h.c }
 func (h basicHost) Addr() Addr               { return h.a }
+
+// RegisterStreamHandler
+func (h basicHost) RegisterStreamHandler(string, Handler) {
+	panic("RegisterStreamHandler NOT IMPLEMENTED")
+}
+
+// UnregisterStreamHandler
+func (h basicHost) UnregisterStreamHandler(string) {
+	panic("UnregisterStreamHandler NOT IMPLEMENTED")
+}
+
+// OpenStream
+func (h basicHost) OpenStream(c context.Context, a Addr, path string) Stream {
+	panic("OpenStream NOT IMPLEMENTED")
+}

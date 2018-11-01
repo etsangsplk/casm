@@ -24,6 +24,13 @@ type mockHost struct {
 func (h mockHost) Context() context.Context { return h.Ctx }
 func (h mockHost) Addr() casm.Addr          { return &mockAddr{casm.NewID()} }
 
+func (mockHost) RegisterStreamHandler(string, casm.Handler) {}
+func (mockHost) UnregisterStreamHandler(string)             {}
+
+func (mockHost) OpenStream(context.Context, casm.Addr, string) casm.Stream {
+	panic("OpenStream NOT IMPLEMENTED")
+}
+
 func TestVertex(t *testing.T) {
 	h := &mockHost{Ctx: context.Background()}
 
