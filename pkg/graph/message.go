@@ -3,13 +3,24 @@ package graph
 import (
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/lthibault/casm/api/graph"
 	casm "github.com/lthibault/casm/pkg"
 	capnp "zombiezen.com/go/capnproto2"
 )
 
-var msgPool = sync.Pool{New: func() interface{} {
+type messagePool sync.Pool
+
+func (p *messagePool) Get() (m *message) {
+	m = (*sync.Pool)(unsafe.Pointer(p)).Get().(*message)
+	m.ctr = 1
+	return
+}
+
+func (p *messagePool) Put(m *message) { (*sync.Pool)(unsafe.Pointer(p)).Put(m) }
+
+var msgPool = messagePool(sync.Pool{New: func() interface{} {
 	var err error
 	msg := new(message)
 
@@ -23,13 +34,12 @@ var msgPool = sync.Pool{New: func() interface{} {
 	}
 
 	return msg
-}}
+}})
 
 type message struct {
 	cm  *capnp.Message
 	m   graph.Message
 	ctr uint32
-	p   *sync.Pool
 }
 
 // ID of the sender
@@ -59,7 +69,7 @@ func (m *message) Ref() { atomic.AddUint32(&m.ctr, 1) }
 // message will be returned to the sync.Pool.
 func (m *message) Free() {
 	if atomic.AddUint32(&m.ctr, ^uint32(0)) == 0 {
-		m.p.Put(m)
+		msgPool.Put(m)
 	}
 }
 
@@ -68,9 +78,7 @@ type messageFactory func([]byte) *message
 func newMsgFactory(pid casm.PeerID) func([]byte) *message {
 	var seq uint64
 	return func(b []byte) (msg *message) {
-		msg = msgPool.Get().(*message)
-		msg.p = &msgPool
-		msg.ctr = 1
+		msg = msgPool.Get()
 		msg.m.SetId(uint64(pid))
 		msg.m.SetSeq(atomic.AddUint64(&seq, 1))
 		msg.m.SetBody(b)
