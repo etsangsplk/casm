@@ -47,6 +47,14 @@ func (v V) Context() context.Context { return v.h.Context() }
 func (v V) Message() Broadcaster { return v.b }
 
 // Edge provides an interface for connecting to peeers
-func (v V) Edge() Neighborhood {
-	panic("Edge NOT IMPLEMENTED")
+func (v *V) Edge() Neighborhood { return v }
+
+// Lease an edge slot to the specified peer
+func (v V) Lease(a casm.Addr) {
+	panic("Lease NOT IMPLEMENTED")
+}
+
+// Evict the specified peer from the vertex, closing all connections
+func (v V) Evict(id casm.IDer) {
+	panic("Evict NOT IMPLEMENTED")
 }
