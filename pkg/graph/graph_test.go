@@ -27,9 +27,12 @@ func (h mockHost) Addr() casm.Addr          { return &mockAddr{casm.NewID()} }
 func (mockHost) RegisterStreamHandler(string, casm.Handler) {}
 func (mockHost) UnregisterStreamHandler(string)             {}
 
-func (mockHost) OpenStream(context.Context, casm.Addr, string) (casm.Stream, error) {
+func (mockHost) OpenStream(context.Context, casm.Addresser, string) (casm.Stream, error) {
 	panic("OpenStream NOT IMPLEMENTED")
 }
+
+func (mockHost) Connect(context.Context, casm.Addresser) error { return nil }
+func (mockHost) Disconnect(casm.Addresser)                     {}
 
 func TestVertex(t *testing.T) {
 	h := &mockHost{Ctx: context.Background()}
