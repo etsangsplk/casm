@@ -3,16 +3,11 @@ package casm
 import (
 	"context"
 	"io"
-	"sync"
+	gonet "net"
 	"time"
-	"unsafe"
 
 	net "github.com/libp2p/go-libp2p-net"
 )
-
-var strmPool = streamPool(sync.Pool{New: func() interface{} {
-	return new(stream)
-}})
 
 // Stream is a bidirectional connection between two hosts.  Callers MUST call
 // Close before discarding the stream.
@@ -39,14 +34,6 @@ type HandlerFunc func(Stream)
 // ServeStream satisfies Handler.  It calls h.
 func (h HandlerFunc) ServeStream(s Stream) { h(s) }
 
-type streamPool sync.Pool
-
-func (p *streamPool) Get() *stream {
-	return (*sync.Pool)(unsafe.Pointer(p)).Get().(*stream)
-}
-
-func (p *streamPool) Put(s *stream) { (*sync.Pool)(unsafe.Pointer(p)).Put(s) }
-
 type stream struct {
 	c      context.Context
 	cancel func()
@@ -54,7 +41,7 @@ type stream struct {
 }
 
 func newStream(c context.Context, s net.Stream) (str *stream) {
-	str = strmPool.Get()
+	str = new(stream)
 	str.c, str.cancel = context.WithCancel(c)
 	str.Stream = s
 	return
@@ -68,11 +55,26 @@ func (s stream) CloseWrite() error { return s.Stream.Close() }
 
 // Close *MUST* be called before discarding the stream
 func (s stream) Close() error {
-	defer s.free()
+	s.cancel()
 	return s.Reset()
 }
 
-func (s *stream) free() {
-	s.cancel()
-	strmPool.Put(s)
+func (s stream) Read(b []byte) (n int, err error) {
+	if n, err = s.Stream.Read(b); err != nil {
+		s.maybePermanent(err)
+	}
+	return
+}
+
+func (s stream) Write(b []byte) (n int, err error) {
+	if n, err = s.Stream.Write(b); err != nil {
+		s.maybePermanent(err)
+	}
+	return
+}
+
+func (s stream) maybePermanent(err error) {
+	if err, ok := err.(gonet.Error); ok && !err.Temporary() {
+		s.cancel()
+	}
 }
