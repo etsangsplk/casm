@@ -3,6 +3,8 @@ package casm
 import (
 	"context"
 
+	"github.com/libp2p/go-libp2p-peerstore"
+
 	libp2p "github.com/libp2p/go-libp2p"
 	host "github.com/libp2p/go-libp2p-host"
 	net "github.com/libp2p/go-libp2p-net"
@@ -19,6 +21,8 @@ type Host interface {
 	RegisterStreamHandler(string, Handler)
 	UnregisterStreamHandler(string)
 	OpenStream(context.Context, Addresser, string) (Stream, error)
+	Connect(context.Context, Addresser) error
+	Disconnect(Addresser)
 }
 
 type basicHost struct {
@@ -82,4 +86,17 @@ func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Str
 	// pass host's context because context `c` is the stream-open context.  It
 	// may contain timeouts.
 	return newStream(bh.c, s), nil
+}
+
+// Connect to a peer
+func (bh basicHost) Connect(c context.Context, a Addresser) error {
+	return bh.h.Connect(c, peerstore.PeerInfo{
+		ID:    peer.ID(a.Addr().Label()),
+		Addrs: a.Addr().Addrs(),
+	})
+}
+
+// Disconnect from a peer
+func (bh basicHost) Disconnect(a Addresser) {
+	bh.h.Peerstore().ClearAddrs(peer.ID(a.Addr().Label()))
 }
