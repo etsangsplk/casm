@@ -1,3 +1,4 @@
+// Package casm implements raw CASM hosts
 package casm
 
 import (
