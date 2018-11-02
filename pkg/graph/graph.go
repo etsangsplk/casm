@@ -5,10 +5,15 @@ import (
 	"context"
 
 	casm "github.com/lthibault/casm/pkg"
+	"github.com/pkg/errors"
 )
 
 // compile-time type constraint
 var _ Vertex = &V{}
+
+const (
+	pathEdge = "/edge"
+)
 
 // Vertex in the expander graph
 type Vertex interface {
@@ -53,7 +58,11 @@ func (v V) Message() Broadcaster { return v.b }
 func (v *V) Edge() Neighborhood { return v }
 
 // Lease an edge slot to the specified peer
-func (v V) Lease(a casm.Addr) {
+func (v V) Lease(c context.Context, a casm.Addr) error {
+	s, err := v.h.OpenStream(c, a, pathEdge)
+	if err != nil {
+		return errors.Wrap(err, "open stream")
+	}
 	panic("Lease NOT IMPLEMENTED")
 }
 

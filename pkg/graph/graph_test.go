@@ -13,8 +13,9 @@ import (
 
 type mockAddr struct{ casm.IDer }
 
-func (mockAddr) Addrs() []ma.Multiaddr { return []ma.Multiaddr{} }
-func (mockAddr) Label() casm.HostLabel { return "test" }
+func (m mockAddr) Addr() casm.Addr          { return m }
+func (mockAddr) MultiAddrs() []ma.Multiaddr { return []ma.Multiaddr{} }
+func (mockAddr) Label() casm.HostLabel      { return "test" }
 
 type mockHost struct {
 	casm.PeerID

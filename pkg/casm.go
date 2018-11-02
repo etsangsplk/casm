@@ -93,7 +93,7 @@ func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Str
 func (bh basicHost) Connect(c context.Context, a Addresser) error {
 	return bh.h.Connect(c, peerstore.PeerInfo{
 		ID:    peer.ID(a.Addr().Label()),
-		Addrs: a.Addr().Addrs(),
+		Addrs: a.Addr().MultiAddrs(),
 	})
 }
 

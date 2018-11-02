@@ -3,8 +3,6 @@ package graph
 const (
 	defaultK uint8 = 5
 	defaultL uint8 = 1
-
-	pathEdge = "/edge"
 )
 
 // Option type for V

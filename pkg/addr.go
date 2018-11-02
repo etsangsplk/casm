@@ -48,7 +48,8 @@ type Addresser interface {
 type Addr interface {
 	IDer
 	Label() HostLabel
-	Addrs() []ma.Multiaddr
+	Addr() Addr
+	MultiAddrs() []ma.Multiaddr
 }
 
 type addr struct {
@@ -57,5 +58,6 @@ type addr struct {
 	as []ma.Multiaddr
 }
 
-func (a addr) Label() HostLabel      { return a.l }
-func (a addr) Addrs() []ma.Multiaddr { return a.as }
+func (a addr) Label() HostLabel           { return a.l }
+func (a addr) Addr() Addr                 { return a }
+func (a addr) MultiAddrs() []ma.Multiaddr { return a.as }
