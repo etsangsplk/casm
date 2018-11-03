@@ -12,8 +12,10 @@ import (
 // Stream is a bidirectional connection between two hosts.  Callers MUST call
 // Close before discarding the stream.
 type Stream interface {
+
 	// Context expires when the connection is closed
 	Context() context.Context
+	RemotePeer() PeerID
 
 	// CloseWrite closes the stream for writing.  Reading will still work (i.e.:
 	// the remote side can still write).
@@ -38,19 +40,23 @@ type HandlerFunc func(Stream)
 func (h HandlerFunc) ServeStream(s Stream) { h(s) }
 
 type stream struct {
-	c      context.Context
+	c context.Context
+	IDer
 	cancel func()
 	net.Stream
 }
 
-func newStream(c context.Context, s net.Stream) (str *stream) {
+func newStream(c context.Context, id IDer, s net.Stream) (str *stream) {
 	str = new(stream)
 	str.c, str.cancel = context.WithCancel(c)
+	str.IDer = id
 	str.Stream = s
 	return
 }
 
 func (s stream) Context() context.Context { return s.c }
+
+func (s stream) RemotePeer() PeerID { return s.ID() }
 
 // CloseWrite closes the stream for writing.  Reading will still work (i.e.: the
 // remote side can still write).

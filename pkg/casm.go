@@ -175,7 +175,12 @@ func (bh basicHost) Stream() StreamManager { return bh }
 
 func (bh basicHost) Register(path string, h Handler) {
 	bh.h.SetStreamHandler(protocol.ID(path), func(s net.Stream) {
-		strm := newStream(bh.c, s)
+		id, ok := bh.idmap.GetKey(s.Conn().RemotePeer())
+		if !ok {
+			panic("should have PeerID in idmap")
+		}
+
+		strm := newStream(bh.c, id, s)
 		defer strm.Close()
 		h.ServeStream(strm)
 	})
@@ -191,9 +196,14 @@ func (bh basicHost) Open(c context.Context, a Addresser, path string) (Stream, e
 		return nil, errors.Wrap(err, "libp2p")
 	}
 
+	id, ok := bh.idmap.GetKey(s.Conn().RemotePeer())
+	if !ok {
+		panic("should have PeerID in idmap")
+	}
+
 	// pass host's context because context `c` is the stream-open context.  It
 	// may contain timeouts.
-	return newStream(bh.c, s), nil
+	return newStream(bh.c, id, s), nil
 }
 
 /*

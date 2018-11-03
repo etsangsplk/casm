@@ -92,17 +92,29 @@ func (v vertex) handleEdge(s casm.Stream) {
 
 /* Implement NetHook */
 
-// Listen is called when the host begins listening
-func (v vertex) Listen(net.Network, ma.Multiaddr) {}
+// Listen is called when the host begins listening on an addr
+func (v vertex) Listen(net.Network, ma.Multiaddr) {
+	// incr a counter atomically
+	// if the counter was incred FROM 0, start the vertex's state-maintenance logic
+}
 
-// ListenClose is called when the host stops listening
-func (v vertex) ListenClose(net.Network, ma.Multiaddr) {}
+// ListenClose is called when the host stops listening on an addr
+func (v vertex) ListenClose(net.Network, ma.Multiaddr) {
+	// decr a counter atomically
+	// if the counter is 0, stop the vertex's state-maintenance logic & clean-up
+}
 
 // Connected is called when a connection is opened
-func (v vertex) Connected(net.Network, net.Conn) {}
+func (v vertex) Connected(net.Network, net.Conn) {
+	// incr a counter that tracks current cardinality
+	// trigger notifications of state-change, where necessary
+}
 
 // Disconnected is called when a connection is closed
-func (v vertex) Disconnected(net.Network, net.Conn) {}
+func (v vertex) Disconnected(net.Network, net.Conn) {
+	// decr a counter that tracks current cardinality
+	// trigger notifications of state-change, where necessary
+}
 
 // OpenedStream is called when a stream is opened
 func (v vertex) OpenedStream(net.Network, net.Stream) {}
