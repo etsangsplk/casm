@@ -57,8 +57,8 @@ func (v V) Message() Broadcaster { return v.b }
 func (v *V) Edge() Neighborhood { return v }
 
 // Connected returns true if the vertex has an edge to the specified peer
-func (v V) Connected(a casm.Addresser) (ok bool) {
-	_, ok = v.h.PeerAddr(a.Addr().Label())
+func (v V) Connected(id casm.IDer) (ok bool) {
+	_, ok = v.h.PeerAddr(id)
 	return
 }
 

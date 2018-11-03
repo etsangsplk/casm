@@ -3,8 +3,11 @@ package casm
 
 import (
 	"context"
+	"log"
+	"sync"
 
 	"github.com/libp2p/go-libp2p-peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	host "github.com/libp2p/go-libp2p-host"
@@ -22,7 +25,7 @@ const (
 // a client.  In the CASM expander-graph model, it is a vertex.
 type Host interface {
 	Addr() Addr
-	PeerAddr(HostLabel) (Addr, bool)
+	PeerAddr(IDer) (Addr, bool)
 	Context() context.Context
 	RegisterStreamHandler(string, Handler)
 	UnregisterStreamHandler(string)
@@ -31,10 +34,56 @@ type Host interface {
 	Disconnect(Addresser)
 }
 
+type idMap struct {
+	sync.RWMutex
+	m map[PeerID]peer.ID
+}
+
+func (m *idMap) Get(id IDer) (hid peer.ID, ok bool) {
+	m.RLock()
+	hid, ok = m.m[id.ID()]
+	m.RUnlock()
+	return
+}
+
+func (m *idMap) Set(id IDer, hid peer.ID) {
+	m.Lock()
+	m.m[id.ID()] = hid
+	m.Unlock()
+}
+
+func (m *idMap) Del(id IDer) {
+	m.Lock()
+	delete(m.m, id.ID())
+	m.Unlock()
+}
+
+func (m *idMap) Listen(net.Network, ma.Multiaddr)      {}
+func (m *idMap) ListenClose(net.Network, ma.Multiaddr) {}
+func (m *idMap) OpenedStream(net.Network, net.Stream)  {}
+func (m *idMap) ClosedStream(net.Network, net.Stream)  {}
+func (m *idMap) Connected(_ net.Network, conn net.Conn) {
+	log.Println(conn.Stat().Extra)
+}
+
+// called when a connection closed
+func (m *idMap) Disconnected(_ net.Network, conn net.Conn) {
+	m.Lock()
+	defer m.Unlock()
+
+	hid := conn.RemotePeer()
+	for k, v := range m.m {
+		if v == hid {
+			delete(m.m, k)
+		}
+	}
+}
+
 type basicHost struct {
-	a Addr
-	c context.Context
-	h host.Host
+	a     Addr
+	c     context.Context
+	h     host.Host
+	idmap *idMap
 }
 
 // New Host whose lifetime is bound to the context c.
@@ -52,6 +101,10 @@ func New(c context.Context, opt ...Option) (Host, error) {
 		return nil, errors.Wrap(err, "libp2p")
 	}
 
+	idmap := &idMap{m: make(map[PeerID]peer.ID)}
+	h.idmap = idmap
+	h.h.Network().Notify(h.idmap)
+
 	pa := host.PeerInfoFromHost(h.h)
 	h.a = &addr{IDer: NewID(), l: HostLabel(pa.ID), as: pa.Addrs}
 
@@ -67,14 +120,12 @@ func New(c context.Context, opt ...Option) (Host, error) {
 // Context to which the Host is bound
 func (bh basicHost) Context() context.Context { return bh.c }
 func (bh basicHost) Addr() Addr               { return bh.a }
-func (bh basicHost) PeerAddr(l HostLabel) (Addr, bool) {
-	v, err := bh.h.Peerstore().Get(peer.ID(l), keyPID)
-	if err != nil {
-		return nil, false
+func (bh basicHost) PeerAddr(id IDer) (a Addr, ok bool) {
+	var hid peer.ID
+	if hid, ok = bh.idmap.Get(id); ok {
+		a = &addr{IDer: id, l: HostLabel(hid), as: bh.h.Peerstore().Addrs(hid)}
 	}
-
-	pi := bh.h.Peerstore().PeerInfo(peer.ID(l))
-	return &addr{IDer: v.(PeerID), l: l, as: pi.Addrs}, true
+	return
 }
 
 // RegisterStreamHandler
@@ -108,15 +159,15 @@ func (bh basicHost) Connect(c context.Context, a Addresser) (err error) {
 	if err = bh.h.Connect(c, peerstore.PeerInfo{
 		ID:    peer.ID(a.Addr().Label()),
 		Addrs: a.Addr().MultiAddrs(),
-	}); err != nil {
-		return
+	}); err == nil {
+		bh.idmap.Set(a.Addr(), peer.ID(a.Addr().Label()))
 	}
 
-	// This _should_ get cleared on call to ClearAddrs or peer disconnection...
-	return bh.h.Peerstore().Put(peer.ID(a.Addr().Label()), keyPID, a.Addr().ID())
+	return
 }
 
 // Disconnect from a peer
 func (bh basicHost) Disconnect(a Addresser) {
-	bh.h.Peerstore().ClearAddrs(peer.ID(a.Addr().Label()))
+	bh.h.Network().ClosePeer(peer.ID(a.Addr().Label()))
+	bh.h.Peerstore().ClearAddrs(peer.ID(a.Addr().Label())) // necessary?
 }
