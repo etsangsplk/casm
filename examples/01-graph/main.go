@@ -30,17 +30,14 @@ var (
 	res  = make(map[int]string, len(addrs))
 )
 
-func newVertex(listen string) (graph.Vertex, error) {
+func newVertex(l string) (v graph.Vertex, err error) {
 	var h casm.Host
 	if h, err = casm.New(c, casm.OptListenAddrStrings(l)); err != nil {
 		err = errors.Wrap(err, "create host")
-		break
-	}
-
-	if v, err = graph.New(h, graph.OptCardinality(k)); err != nil {
+	} else if v, err = graph.New(h, graph.OptCardinality(k)); err != nil {
 		err = errors.Wrap(err, "create vertex")
-		break
 	}
+	return
 }
 
 func buildGraph(listen ...string) (vtxs []graph.Vertex, err error) {
@@ -52,7 +49,7 @@ func buildGraph(listen ...string) (vtxs []graph.Vertex, err error) {
 		}
 
 		if i > 0 {
-			if err = vtx[i].Edge().Lease(c), vtx[i-1]; err != nil {
+			if err = vtxs[i].Edge().Lease(c, vtxs[i-1]); err != nil {
 				err = errors.Wrap(err, "lease")
 				break
 			}
@@ -76,7 +73,7 @@ func broadcast(wg *sync.WaitGroup, id int, v graph.Vertex) {
 
 			lock.Lock()
 			res[id] = string(b)
-			res.Unlock()
+			lock.Unlock()
 		}
 	}()
 
