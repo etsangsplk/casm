@@ -22,8 +22,9 @@ type mockHost struct {
 	Ctx context.Context
 }
 
-func (h mockHost) Context() context.Context { return h.Ctx }
-func (h mockHost) Addr() casm.Addr          { return &mockAddr{casm.NewID()} }
+func (h mockHost) Context() context.Context                  { return h.Ctx }
+func (h mockHost) Addr() casm.Addr                           { return &mockAddr{casm.NewID()} }
+func (h mockHost) PeerAddr(casm.HostLabel) (casm.Addr, bool) { return &mockAddr{casm.NewID()}, true }
 
 func (mockHost) RegisterStreamHandler(string, casm.Handler) {}
 func (mockHost) UnregisterStreamHandler(string)             {}

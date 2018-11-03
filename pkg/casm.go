@@ -14,10 +14,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	keyPID = "pid"
+)
+
 // Host is a logical machine in a compute cluster.  It acts both as a server and
 // a client.  In the CASM expander-graph model, it is a vertex.
 type Host interface {
 	Addr() Addr
+	PeerAddr(HostLabel) (Addr, bool)
 	Context() context.Context
 	RegisterStreamHandler(string, Handler)
 	UnregisterStreamHandler(string)
@@ -62,6 +67,15 @@ func New(c context.Context, opt ...Option) (Host, error) {
 // Context to which the Host is bound
 func (bh basicHost) Context() context.Context { return bh.c }
 func (bh basicHost) Addr() Addr               { return bh.a }
+func (bh basicHost) PeerAddr(l HostLabel) (Addr, bool) {
+	v, err := bh.h.Peerstore().Get(peer.ID(l), keyPID)
+	if err != nil {
+		return nil, false
+	}
+
+	pi := bh.h.Peerstore().PeerInfo(peer.ID(l))
+	return &addr{IDer: v.(PeerID), l: l, as: pi.Addrs}, true
+}
 
 // RegisterStreamHandler
 func (bh basicHost) RegisterStreamHandler(path string, h Handler) {
@@ -90,11 +104,16 @@ func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Str
 }
 
 // Connect to a peer
-func (bh basicHost) Connect(c context.Context, a Addresser) error {
-	return bh.h.Connect(c, peerstore.PeerInfo{
+func (bh basicHost) Connect(c context.Context, a Addresser) (err error) {
+	if err = bh.h.Connect(c, peerstore.PeerInfo{
 		ID:    peer.ID(a.Addr().Label()),
 		Addrs: a.Addr().MultiAddrs(),
-	})
+	}); err != nil {
+		return
+	}
+
+	// This _should_ get cleared on call to ClearAddrs or peer disconnection...
+	return bh.h.Peerstore().Put(peer.ID(a.Addr().Label()), keyPID, a.Addr().ID())
 }
 
 // Disconnect from a peer

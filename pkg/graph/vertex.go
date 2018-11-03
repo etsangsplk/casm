@@ -5,7 +5,6 @@ import (
 	"context"
 
 	casm "github.com/lthibault/casm/pkg"
-	"github.com/pkg/errors"
 )
 
 // compile-time type constraint
@@ -57,14 +56,26 @@ func (v V) Message() Broadcaster { return v.b }
 // Edge provides an interface for connecting to peeers
 func (v *V) Edge() Neighborhood { return v }
 
+// Connected returns true if the vertex has an edge to the specified peer
+func (v V) Connected(a casm.Addresser) (ok bool) {
+	_, ok = v.h.PeerAddr(a.Addr().Label())
+	return
+}
+
 // Lease an edge slot to the specified peer
 func (v V) Lease(c context.Context, a casm.Addresser) error {
-	s, err := v.h.OpenStream(c, a, pathEdge)
-	if err != nil {
-		return errors.Wrap(err, "open stream")
+	if v.Connected(a.Addr()) {
+		return nil
 	}
 
-	panic("do something with stream NOT IMPLEMENTED")
+	// we want to build an edge, then add it to an edgeSet
+
+	// s, err := v.h.OpenStream(c, a, pathEdge)
+	// if err != nil {
+	// 	return errors.Wrap(err, "open stream")
+	// }
+
+	panic("Lease NOT IMPLEMENTED")
 }
 
 // Evict the specified peer from the vertex, closing all connections
