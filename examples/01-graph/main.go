@@ -50,6 +50,13 @@ func buildGraph(listen ...string) (vtxs []graph.Vertex, err error) {
 		if vtxs[i], err = newVertex(l); err != nil {
 			break
 		}
+
+		if i > 0 {
+			if err = vtx[i].Edge().Lease(c), vtx[i-1]; err != nil {
+				err = errors.Wrap(err, "lease")
+				break
+			}
+		}
 	}
 
 	return
