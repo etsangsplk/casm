@@ -5,6 +5,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/emirpasic/gods/maps"
+	"github.com/emirpasic/gods/maps/hashbidimap"
+
 	"github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -52,25 +55,44 @@ type Host interface {
 
 type idMap struct {
 	sync.RWMutex
-	m map[PeerID]peer.ID
+	m maps.BidiMap
 }
+
+func newIDMap() *idMap { return &idMap{m: hashbidimap.New()} }
 
 func (m *idMap) Get(id IDer) (hid peer.ID, ok bool) {
 	m.RLock()
-	hid, ok = m.m[id.ID()]
-	m.RUnlock()
+	defer m.RUnlock()
+
+	var v interface{}
+	if v, ok = m.m.Get(id.ID()); ok {
+		hid = v.(peer.ID)
+	}
+
+	return
+}
+
+func (m *idMap) GetKey(hid peer.ID) (id PeerID, ok bool) {
+	m.RLock()
+	defer m.RUnlock()
+
+	var v interface{}
+	if v, ok = m.m.GetKey(hid); ok {
+		id = v.(PeerID)
+	}
+
 	return
 }
 
 func (m *idMap) Set(id IDer, hid peer.ID) {
 	m.Lock()
-	m.m[id.ID()] = hid
+	m.m.Put(id.ID(), hid)
 	m.Unlock()
 }
 
 func (m *idMap) Del(id IDer) {
 	m.Lock()
-	delete(m.m, id.ID())
+	m.m.Remove(id.ID())
 	m.Unlock()
 }
 
@@ -94,15 +116,8 @@ func (m idMapHook) Connected(_ net.Network, conn net.Conn) {
 
 // called when a connection closed
 func (m idMapHook) Disconnected(net net.Network, _ net.Conn) {
-	defer net.StopNotify(m) // corresponds to AddNetHook in basicHost.Connect
-
-	m.Lock()
-	for k := range m.m {
-		if k == m.ID() {
-			delete(m.m, k)
-		}
-	}
-	m.Unlock()
+	m.Del(m)
+	net.StopNotify(m) // corresponds to AddNetHook in basicHost.Connect
 }
 
 type basicHost struct {
@@ -122,7 +137,7 @@ func New(c context.Context, opt ...Option) (Host, error) {
 	popt := defaultP2pOpts()
 	popt.Load(opt)
 
-	h := &basicHost{c: c, idmap: &idMap{m: make(map[PeerID]peer.ID)}}
+	h := &basicHost{c: c, idmap: newIDMap()}
 	if h.h, err = libp2p.New(c, popt...); err != nil {
 		return nil, errors.Wrap(err, "libp2p")
 	}
