@@ -58,7 +58,7 @@ func (v V) Message() Broadcaster { return v.b }
 func (v *V) Edge() Neighborhood { return v }
 
 // Lease an edge slot to the specified peer
-func (v V) Lease(c context.Context, a casm.Addr) error {
+func (v V) Lease(c context.Context, a casm.Addresser) error {
 	s, err := v.h.OpenStream(c, a, pathEdge)
 	if err != nil {
 		return errors.Wrap(err, "open stream")
