@@ -3,7 +3,6 @@ package casm
 
 import (
 	"context"
-	"log"
 	"sync"
 
 	"github.com/libp2p/go-libp2p-peerstore"
@@ -58,25 +57,35 @@ func (m *idMap) Del(id IDer) {
 	m.Unlock()
 }
 
-func (m *idMap) Listen(net.Network, ma.Multiaddr)      {}
-func (m *idMap) ListenClose(net.Network, ma.Multiaddr) {}
-func (m *idMap) OpenedStream(net.Network, net.Stream)  {}
-func (m *idMap) ClosedStream(net.Network, net.Stream)  {}
-func (m *idMap) Connected(_ net.Network, conn net.Conn) {
-	log.Println(conn.Stat().Extra)
+type idMapHook struct {
+	*idMap
+	IDer
+}
+
+func newIDMapHook(idm *idMap, id IDer) idMapHook {
+	return idMapHook{idMap: idm, IDer: id}
+}
+
+func (m idMapHook) Listen(net.Network, ma.Multiaddr)      {}
+func (m idMapHook) ListenClose(net.Network, ma.Multiaddr) {}
+func (m idMapHook) OpenedStream(net.Network, net.Stream)  {}
+func (m idMapHook) ClosedStream(net.Network, net.Stream)  {}
+
+func (m idMapHook) Connected(_ net.Network, conn net.Conn) {
+	m.Set(m, conn.LocalPeer())
 }
 
 // called when a connection closed
-func (m *idMap) Disconnected(_ net.Network, conn net.Conn) {
-	m.Lock()
-	defer m.Unlock()
+func (m idMapHook) Disconnected(net net.Network, _ net.Conn) {
+	defer net.StopNotify(m)
 
-	hid := conn.RemotePeer()
-	for k, v := range m.m {
-		if v == hid {
+	m.Lock()
+	for k := range m.m {
+		if k == m.ID() {
 			delete(m.m, k)
 		}
 	}
+	m.Unlock()
 }
 
 type basicHost struct {
@@ -96,14 +105,10 @@ func New(c context.Context, opt ...Option) (Host, error) {
 	popt := defaultP2pOpts()
 	popt.Load(opt)
 
-	h := &basicHost{c: c}
+	h := &basicHost{c: c, idmap: &idMap{m: make(map[PeerID]peer.ID)}}
 	if h.h, err = libp2p.New(c, popt...); err != nil {
 		return nil, errors.Wrap(err, "libp2p")
 	}
-
-	idmap := &idMap{m: make(map[PeerID]peer.ID)}
-	h.idmap = idmap
-	h.h.Network().Notify(h.idmap)
 
 	pa := host.PeerInfoFromHost(h.h)
 	h.a = &addr{IDer: NewID(), l: HostLabel(pa.ID), as: pa.Addrs}
@@ -155,15 +160,13 @@ func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Str
 }
 
 // Connect to a peer
-func (bh basicHost) Connect(c context.Context, a Addresser) (err error) {
-	if err = bh.h.Connect(c, peerstore.PeerInfo{
+func (bh basicHost) Connect(c context.Context, a Addresser) error {
+	bh.h.Network().Notify(newIDMapHook(bh.idmap, a.Addr()))
+
+	return bh.h.Connect(c, peerstore.PeerInfo{
 		ID:    peer.ID(a.Addr().Label()),
 		Addrs: a.Addr().MultiAddrs(),
-	}); err == nil {
-		bh.idmap.Set(a.Addr(), peer.ID(a.Addr().Label()))
-	}
-
-	return
+	})
 }
 
 // Disconnect from a peer
