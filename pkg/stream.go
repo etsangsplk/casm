@@ -14,6 +14,9 @@ import (
 type Stream interface {
 	// Context expires when the connection is closed
 	Context() context.Context
+
+	// CloseWrite closes the stream for writing.  Reading will still work (i.e.:
+	// the remote side can still write).
 	CloseWrite() error
 	io.ReadWriteCloser
 	SetDeadline(time.Time) error
@@ -49,7 +52,7 @@ func newStream(c context.Context, s net.Stream) (str *stream) {
 
 func (s stream) Context() context.Context { return s.c }
 
-// CloseWrite clsoes the stream for writing.  Reading will still work (i.e.: the
+// CloseWrite closes the stream for writing.  Reading will still work (i.e.: the
 // remote side can still write).
 func (s stream) CloseWrite() error { return s.Stream.Close() }
 
