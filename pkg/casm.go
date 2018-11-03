@@ -57,12 +57,11 @@ type Host interface {
 }
 
 type idMap struct {
-	IDer
 	sync.RWMutex
 	m maps.BidiMap
 }
 
-func newIDMap(id IDer) *idMap { return &idMap{IDer: id, m: hashbidimap.New()} }
+func newIDMap() *idMap { return &idMap{m: hashbidimap.New()} }
 
 func (m *idMap) Get(id IDer) (hid peer.ID, ok bool) {
 	m.RLock()
@@ -108,12 +107,17 @@ func (m *idMap) DelKey(v peer.ID) {
 	m.Unlock()
 }
 
-func (m *idMap) Listen(net.Network, ma.Multiaddr)      {}
-func (m *idMap) ListenClose(net.Network, ma.Multiaddr) {}
-func (m *idMap) OpenedStream(net.Network, net.Stream)  {}
-func (m *idMap) ClosedStream(net.Network, net.Stream)  {}
+type idNetHook struct {
+	IDer
+	*idMap
+}
 
-func (m *idMap) Connected(_ net.Network, conn net.Conn) {
+func (h idNetHook) Listen(net.Network, ma.Multiaddr)      {}
+func (h idNetHook) ListenClose(net.Network, ma.Multiaddr) {}
+func (h idNetHook) OpenedStream(net.Network, net.Stream)  {}
+func (h idNetHook) ClosedStream(net.Network, net.Stream)  {}
+
+func (h idNetHook) Connected(_ net.Network, conn net.Conn) {
 	s, err := conn.NewStream()
 	if err != nil {
 		conn.Close()
@@ -125,7 +129,7 @@ func (m *idMap) Connected(_ net.Network, conn net.Conn) {
 	switch conn.Stat().Direction {
 	case net.DirOutbound:
 		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(m.ID()))
+		binary.BigEndian.PutUint64(b, uint64(h.ID()))
 		if _, err = io.Copy(s, bytes.NewBuffer(b)); err != nil {
 			conn.Close()
 		}
@@ -136,15 +140,15 @@ func (m *idMap) Connected(_ net.Network, conn net.Conn) {
 			conn.Close()
 		}
 
-		m.Set(PeerID(binary.BigEndian.Uint64(buf.Bytes())), conn.RemotePeer())
+		h.Set(PeerID(binary.BigEndian.Uint64(buf.Bytes())), conn.RemotePeer())
 	case net.DirUnknown:
 		panic("unknown direction")
 	}
 }
 
 // called when a connection closed
-func (m *idMap) Disconnected(_ net.Network, conn net.Conn) {
-	m.DelKey(conn.RemotePeer())
+func (h idNetHook) Disconnected(_ net.Network, conn net.Conn) {
+	h.DelKey(conn.RemotePeer())
 }
 
 type basicHost struct {
@@ -164,15 +168,15 @@ func New(c context.Context, opt ...Option) (Host, error) {
 	popt := defaultP2pOpts()
 	popt.Load(opt)
 
-	h := &basicHost{c: c, idmap: newIDMap(NewID())}
+	h := &basicHost{c: c, idmap: newIDMap()}
 
 	if h.h, err = libp2p.New(c, popt...); err != nil {
 		return nil, errors.Wrap(err, "libp2p")
 	}
 
 	pa := host.PeerInfoFromHost(h.h)
-	h.a = &addr{IDer: h.idmap, l: HostLabel(pa.ID), as: pa.Addrs}
-	h.Add(h.idmap)
+	h.a = &addr{IDer: NewID(), l: HostLabel(pa.ID), as: pa.Addrs}
+	h.Add(&idNetHook{IDer: h.a.Addr(), idMap: h.idmap})
 
 	for _, o := range copt {
 		if err = o.Apply(h); err != nil {
