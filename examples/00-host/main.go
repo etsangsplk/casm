@@ -11,12 +11,12 @@ import (
 func main() {
 	h0, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/127.0.0.1/tcp/9021"))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	h1, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/127.0.0.1/tcp/9022"))
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	h0.RegisterStreamHandler("/echo", casm.HandlerFunc(func(s casm.Stream) {
@@ -30,11 +30,11 @@ func main() {
 			default:
 				n, err := s.Read(b)
 				if err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 
 				if _, err = s.Write(b[:n]); err != nil {
-					panic(err)
+					log.Fatal(err)
 				}
 			}
 		}
@@ -42,7 +42,7 @@ func main() {
 
 	// Connect the hosts to each other
 	if err = h0.Connect(context.Background(), h1); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	// Open a stream
@@ -51,16 +51,16 @@ func main() {
 
 	s, err := h1.OpenStream(c, h0, "/echo")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	if _, err = s.Write([]byte("hello world")); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	b := make([]byte, 11)
 	if _, err = s.Read(b); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	log.Fatal(string(b))
