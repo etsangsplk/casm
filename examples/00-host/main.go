@@ -9,12 +9,12 @@ import (
 )
 
 func main() {
-	h0, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/0.0.0.0/tcp/9021"))
+	h0, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/127.0.0.1/tcp/9021"))
 	if err != nil {
 		panic(err)
 	}
 
-	h1, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/0.0.0.0/tcp/9022"))
+	h1, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/127.0.0.1/tcp/9022"))
 	if err != nil {
 		panic(err)
 	}
