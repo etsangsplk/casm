@@ -2,10 +2,14 @@ package casm
 
 import (
 	"github.com/libp2p/go-libp2p"
+	net "github.com/libp2p/go-libp2p-net"
 	"github.com/libp2p/go-libp2p/config"
 
 	ma "github.com/multiformats/go-multiaddr"
 )
+
+// NetHook is a set of callbacks that are invoked according to network changes
+type NetHook = net.Notifiee
 
 // Option represents a setting
 type Option interface {
@@ -67,4 +71,12 @@ func (h *hostOptions) Load(opt []Option) {
 			*h = append(*h, op)
 		}
 	}
+}
+
+// OptNetHook sets a NetHook on the host
+func OptNetHook(h NetHook) Option {
+	return hostOpt(func(b *basicHost) error {
+		b.h.Network().Notify(h)
+		return nil
+	})
 }
