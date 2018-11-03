@@ -20,7 +20,7 @@ func main() {
 	}
 
 	h0.Stream().Register("/echo", casm.HandlerFunc(func(s casm.Stream) {
-		defer s.Close() // You MUST call Close to avoid memory leaks
+		defer s.Close() // Users SHOULD close streams explicitly
 
 		b := make([]byte, 11)
 		for {
