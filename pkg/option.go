@@ -16,12 +16,6 @@ type Option interface {
 	opt()
 }
 
-// Applicator can be applied to generic Hosts
-type Applicator interface {
-	Option
-	Apply(Host) error
-}
-
 /***************************************
 Adapters for libp2p Host options
 ****************************************/
@@ -77,12 +71,4 @@ func (h *hostOptions) Load(opt []Option) {
 			*h = append(*h, op)
 		}
 	}
-}
-
-// OptNetHook sets a NetHook on the host
-func OptNetHook(h NetHook) Option {
-	return hostOpt(func(b *basicHost) error {
-		b.h.Network().Notify(h)
-		return nil
-	})
 }

@@ -20,17 +20,34 @@ const (
 	keyPID = "pid"
 )
 
+// NetHookManager can add and remove nethooks from a Host
+type NetHookManager interface {
+	Add(NetHook)
+	Remove(NetHook)
+}
+
+// Network manages raw connections
+type Network interface {
+	Connect(context.Context, Addresser) error
+	Disconnect(IDer)
+	Hook() NetHookManager
+}
+
+// StreamManager manages streams, which are multiplexed on top of raw connections
+type StreamManager interface {
+	Register(string, Handler)
+	Unregister(string)
+	Open(context.Context, Addresser, string) (Stream, error)
+}
+
 // Host is a logical machine in a compute cluster.  It acts both as a server and
 // a client.  In the CASM expander-graph model, it is a vertex.
 type Host interface {
+	Context() context.Context
 	Addr() Addr
 	PeerAddr(IDer) (Addr, bool)
-	Context() context.Context
-	RegisterStreamHandler(string, Handler)
-	UnregisterStreamHandler(string)
-	OpenStream(context.Context, Addresser, string) (Stream, error)
-	Connect(context.Context, Addresser) error
-	Disconnect(Addresser)
+	Network() Network
+	Stream() StreamManager
 }
 
 type idMap struct {
@@ -77,7 +94,7 @@ func (m idMapHook) Connected(_ net.Network, conn net.Conn) {
 
 // called when a connection closed
 func (m idMapHook) Disconnected(net net.Network, _ net.Conn) {
-	defer net.StopNotify(m)
+	defer net.StopNotify(m) // corresponds to AddNetHook in basicHost.Connect
 
 	m.Lock()
 	for k := range m.m {
@@ -133,8 +150,15 @@ func (bh basicHost) PeerAddr(id IDer) (a Addr, ok bool) {
 	return
 }
 
-// RegisterStreamHandler
-func (bh basicHost) RegisterStreamHandler(path string, h Handler) {
+func (bh basicHost) Network() Network      { return bh }
+func (bh basicHost) Hook() NetHookManager  { return bh }
+func (bh basicHost) Stream() StreamManager { return bh }
+
+/*
+	implment StreamManager
+*/
+
+func (bh basicHost) Register(path string, h Handler) {
 	bh.h.SetStreamHandler(protocol.ID(path), func(s net.Stream) {
 		strm := newStream(bh.c, s)
 		defer strm.Close()
@@ -142,13 +166,11 @@ func (bh basicHost) RegisterStreamHandler(path string, h Handler) {
 	})
 }
 
-// UnregisterStreamHandler
-func (bh basicHost) UnregisterStreamHandler(path string) {
+func (bh basicHost) Unregister(path string) {
 	bh.h.RemoveStreamHandler(protocol.ID(path))
 }
 
-// OpenStream
-func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Stream, error) {
+func (bh basicHost) Open(c context.Context, a Addresser, path string) (Stream, error) {
 	s, err := bh.h.NewStream(c, peer.ID(a.Addr().Label()), protocol.ID(path))
 	if err != nil {
 		return nil, errors.Wrap(err, "libp2p")
@@ -159,9 +181,12 @@ func (bh basicHost) OpenStream(c context.Context, a Addresser, path string) (Str
 	return newStream(bh.c, s), nil
 }
 
-// Connect to a peer
+/*
+	Implement Network
+*/
+
 func (bh basicHost) Connect(c context.Context, a Addresser) error {
-	bh.h.Network().Notify(newIDMapHook(bh.idmap, a.Addr()))
+	bh.Hook().Add(newIDMapHook(bh.idmap, a.Addr()))
 
 	return bh.h.Connect(c, peerstore.PeerInfo{
 		ID:    peer.ID(a.Addr().Label()),
@@ -169,8 +194,16 @@ func (bh basicHost) Connect(c context.Context, a Addresser) error {
 	})
 }
 
-// Disconnect from a peer
-func (bh basicHost) Disconnect(a Addresser) {
-	bh.h.Network().ClosePeer(peer.ID(a.Addr().Label()))
-	bh.h.Peerstore().ClearAddrs(peer.ID(a.Addr().Label())) // necessary?
+func (bh basicHost) Disconnect(id IDer) {
+	if a, ok := bh.PeerAddr(id); ok {
+		bh.h.Network().ClosePeer(peer.ID(a.Addr().Label()))
+		bh.h.Peerstore().ClearAddrs(peer.ID(a.Addr().Label())) // necessary?
+	}
 }
+
+/*
+	Implement NetHookManager
+*/
+
+func (bh basicHost) Add(h NetHook)    { bh.h.Network().Notify(h) }
+func (bh basicHost) Remove(h NetHook) { bh.h.Network().StopNotify(h) }

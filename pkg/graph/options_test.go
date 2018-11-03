@@ -7,7 +7,7 @@ import (
 )
 
 func TestOptions(t *testing.T) {
-	v := new(V)
+	v := new(vertex)
 
 	t.Run("Cardinality", func(t *testing.T) {
 		t.Run("Set", func(t *testing.T) {

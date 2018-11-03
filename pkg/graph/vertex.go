@@ -10,7 +10,7 @@ import (
 )
 
 // compile-time type constraint
-var _ Vertex = &V{}
+var _ Vertex = &vertex{}
 
 const (
 	pathEdge = "/edge"
@@ -24,48 +24,49 @@ type Vertex interface {
 	Edge() Neighborhood
 }
 
-// V is a concrete Vertex
-type V struct {
+// vertex is a concrete Vertex
+type vertex struct {
 	h    casm.Host
 	b    *broadcast
 	k, l uint8
 }
 
-// New V
-func New(h casm.Host, opt ...Option) (v *V, err error) {
-	v = &V{h: h, b: newBroadcaster(h.Addr())}
+// New Vertex
+func New(h casm.Host, opt ...Option) (v Vertex, err error) {
+	vtx := &vertex{h: h, b: newBroadcaster(h.Addr())}
 
-	v.h.RegisterStreamHandler(pathEdge, casm.HandlerFunc(v.handleEdge))
+	vtx.h.Stream().Register(pathEdge, casm.HandlerFunc(vtx.handleEdge))
 
 	for _, o := range append([]Option{OptDefault()}, opt...) {
-		if err = o(v); err != nil {
+		if err = o(vtx); err != nil {
 			break
 		}
 	}
 
+	v = vtx
 	return
 }
 
 // Addr returns the Vertex's network address
-func (v V) Addr() casm.Addr { return v.h.Addr() }
+func (v vertex) Addr() casm.Addr { return v.h.Addr() }
 
 // Context to which the Vertex's underlying host is bound
-func (v V) Context() context.Context { return v.h.Context() }
+func (v vertex) Context() context.Context { return v.h.Context() }
 
 // Message provides an interface to broadcast/pubsub functionality
-func (v V) Message() Broadcaster { return v.b }
+func (v vertex) Message() Broadcaster { return v.b }
 
 // Edge provides an interface for connecting to peeers
-func (v *V) Edge() Neighborhood { return v }
+func (v *vertex) Edge() Neighborhood { return v }
 
 // In returns true if the vertex has an edge to the specified peer
-func (v V) In(id casm.IDer) (ok bool) {
+func (v vertex) In(id casm.IDer) (ok bool) {
 	_, ok = v.h.PeerAddr(id)
 	return
 }
 
 // Lease an edge slot to the specified peer
-func (v V) Lease(c context.Context, a casm.Addresser) error {
+func (v vertex) Lease(c context.Context, a casm.Addresser) error {
 	if v.In(a.Addr()) {
 		return nil
 	}
@@ -81,30 +82,30 @@ func (v V) Lease(c context.Context, a casm.Addresser) error {
 }
 
 // Evict the specified peer from the vertex, closing all connections
-func (v V) Evict(id casm.IDer) {
+func (v vertex) Evict(id casm.IDer) {
 	panic("Evict NOT IMPLEMENTED")
 }
 
-func (v V) handleEdge(s casm.Stream) {
+func (v vertex) handleEdge(s casm.Stream) {
 	panic("handleEdge NOT IMPLEMENTED")
 }
 
 /* Implement NetHook */
 
 // Listen is called when the host begins listening
-func (v V) Listen(net.Network, ma.Multiaddr) {}
+func (v vertex) Listen(net.Network, ma.Multiaddr) {}
 
 // ListenClose is called when the host stops listening
-func (v V) ListenClose(net.Network, ma.Multiaddr) {}
+func (v vertex) ListenClose(net.Network, ma.Multiaddr) {}
 
 // Connected is called when a connection is opened
-func (v V) Connected(net.Network, net.Conn) {}
+func (v vertex) Connected(net.Network, net.Conn) {}
 
 // Disconnected is called when a connection is closed
-func (v V) Disconnected(net.Network, net.Conn) {}
+func (v vertex) Disconnected(net.Network, net.Conn) {}
 
 // OpenedStream is called when a stream is opened
-func (v V) OpenedStream(net.Network, net.Stream) {}
+func (v vertex) OpenedStream(net.Network, net.Stream) {}
 
 // ClosedStream is called when a stream is closed
-func (v V) ClosedStream(net.Network, net.Stream) {}
+func (v vertex) ClosedStream(net.Network, net.Stream) {}

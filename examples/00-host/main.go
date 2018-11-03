@@ -19,7 +19,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	h0.RegisterStreamHandler("/echo", casm.HandlerFunc(func(s casm.Stream) {
+	h0.Stream().Register("/echo", casm.HandlerFunc(func(s casm.Stream) {
 		defer s.Close() // You MUST call Close to avoid memory leaks
 
 		b := make([]byte, 11)
@@ -41,7 +41,7 @@ func main() {
 	}))
 
 	// Connect the hosts to each other
-	if err = h0.Connect(context.Background(), h1); err != nil {
+	if err = h0.Network().Connect(context.Background(), h1); err != nil {
 		log.Fatal(err)
 	}
 
@@ -49,7 +49,7 @@ func main() {
 	c, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	s, err := h1.OpenStream(c, h0, "/echo")
+	s, err := h1.Stream().Open(c, h0, "/echo")
 	if err != nil {
 		log.Fatal(err)
 	}

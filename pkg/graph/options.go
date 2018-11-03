@@ -1,18 +1,16 @@
 package graph
 
-import casm "github.com/lthibault/casm/pkg"
-
 const (
 	defaultK uint8 = 5
 	defaultL uint8 = 1
 )
 
 // Option type for V
-type Option func(*V) error
+type Option func(*vertex) error
 
 // OptCardinality sets the V cardinality, i.e.: the maximum number of edges
 func OptCardinality(k uint8) Option {
-	return func(v *V) (err error) {
+	return func(v *vertex) (err error) {
 		v.k = k
 		return
 	}
@@ -21,7 +19,7 @@ func OptCardinality(k uint8) Option {
 // OptElasticity sets the V elasticity, i.e.: the number of edges beyond
 // its cardinality limit that it can host.
 func OptElasticity(l uint8) Option {
-	return func(v *V) (err error) {
+	return func(v *vertex) (err error) {
 		v.l = l
 		return
 	}
@@ -29,7 +27,7 @@ func OptElasticity(l uint8) Option {
 
 // OptDefault sets the default options for a V
 func OptDefault() Option {
-	return func(v *V) (err error) {
+	return func(v *vertex) (err error) {
 		apply := func(opt ...Option) {
 			for _, o := range opt {
 				if err == nil {
@@ -41,8 +39,9 @@ func OptDefault() Option {
 		apply(
 			OptCardinality(defaultK),
 			OptElasticity(defaultL),
-			func(v *V) error {
-				return casm.OptNetHook(v).(casm.Applicator).Apply(v.h)
+			func(v *vertex) error {
+				v.h.Network().Hook().Add(v)
+				return nil
 			},
 		)
 
