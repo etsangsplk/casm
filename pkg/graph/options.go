@@ -39,10 +39,6 @@ func OptDefault() Option {
 		apply(
 			OptCardinality(defaultK),
 			OptElasticity(defaultL),
-			func(v *vertex) error {
-				v.h.Network().Hook().Add(v)
-				return nil
-			},
 		)
 
 		return

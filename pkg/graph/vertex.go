@@ -43,6 +43,8 @@ func New(h casm.Host, opt ...Option) (v Vertex, err error) {
 		}
 	}
 
+	h.Network().Hook().Add(vtx)
+
 	v = vtx
 	return
 }
