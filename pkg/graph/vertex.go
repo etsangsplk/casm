@@ -35,14 +35,13 @@ type vertex struct {
 func New(h casm.Host, opt ...Option) (v Vertex, err error) {
 	vtx := &vertex{h: h, b: newBroadcaster(h.Addr())}
 
-	vtx.h.Stream().Register(pathEdge, casm.HandlerFunc(vtx.handleEdge))
-
 	for _, o := range append([]Option{OptDefault()}, opt...) {
 		if err = o(vtx); err != nil {
 			break
 		}
 	}
 
+	h.Stream().Register(pathEdge, casm.HandlerFunc(vtx.handleEdge))
 	h.Network().Hook().Add(vtx)
 
 	v = vtx
