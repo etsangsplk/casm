@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lthibault/casm/pkg/"
+	"github.com/lthibault/casm/pkg"
 	"github.com/lthibault/casm/pkg/graph"
 	"github.com/pkg/errors"
 )
