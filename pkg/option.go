@@ -16,6 +16,12 @@ type Option interface {
 	opt()
 }
 
+// Applicator can be applied to generic Hosts
+type Applicator interface {
+	Option
+	Apply(Host) error
+}
+
 /***************************************
 Adapters for libp2p Host options
 ****************************************/
@@ -56,8 +62,8 @@ func OptListenAddrs(addrs ...ma.Multiaddr) Option {
 
 type hostOpt func(*basicHost) error
 
-func (hostOpt) opt()                         {}
-func (opt hostOpt) Apply(h *basicHost) error { return opt(h) }
+func (hostOpt) opt()                   {}
+func (opt hostOpt) Apply(h Host) error { return opt(h.(*basicHost)) }
 
 type hostOptions []hostOpt
 

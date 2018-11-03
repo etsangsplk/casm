@@ -1,5 +1,7 @@
 package graph
 
+import casm "github.com/lthibault/casm/pkg"
+
 const (
 	defaultK uint8 = 5
 	defaultL uint8 = 1
@@ -39,6 +41,9 @@ func OptDefault() Option {
 		apply(
 			OptCardinality(defaultK),
 			OptElasticity(defaultL),
+			func(v *V) error {
+				return casm.OptNetHook(v).(casm.Applicator).Apply(v.h)
+			},
 		)
 
 		return

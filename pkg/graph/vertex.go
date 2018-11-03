@@ -4,7 +4,9 @@ package graph
 import (
 	"context"
 
+	net "github.com/libp2p/go-libp2p-net"
 	casm "github.com/lthibault/casm/pkg"
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 // compile-time type constraint
@@ -56,15 +58,15 @@ func (v V) Message() Broadcaster { return v.b }
 // Edge provides an interface for connecting to peeers
 func (v *V) Edge() Neighborhood { return v }
 
-// Connected returns true if the vertex has an edge to the specified peer
-func (v V) Connected(id casm.IDer) (ok bool) {
+// In returns true if the vertex has an edge to the specified peer
+func (v V) In(id casm.IDer) (ok bool) {
 	_, ok = v.h.PeerAddr(id)
 	return
 }
 
 // Lease an edge slot to the specified peer
 func (v V) Lease(c context.Context, a casm.Addresser) error {
-	if v.Connected(a.Addr()) {
+	if v.In(a.Addr()) {
 		return nil
 	}
 
@@ -86,3 +88,23 @@ func (v V) Evict(id casm.IDer) {
 func (v V) handleEdge(s casm.Stream) {
 	panic("handleEdge NOT IMPLEMENTED")
 }
+
+/* Implement NetHook */
+
+// Listen is called when the host begins listening
+func (v V) Listen(net.Network, ma.Multiaddr) {}
+
+// ListenClose is called when the host stops listening
+func (v V) ListenClose(net.Network, ma.Multiaddr) {}
+
+// Connected is called when a connection is opened
+func (v V) Connected(net.Network, net.Conn) {}
+
+// Disconnected is called when a connection is closed
+func (v V) Disconnected(net.Network, net.Conn) {}
+
+// OpenedStream is called when a stream is opened
+func (v V) OpenedStream(net.Network, net.Stream) {}
+
+// ClosedStream is called when a stream is closed
+func (v V) ClosedStream(net.Network, net.Stream) {}
