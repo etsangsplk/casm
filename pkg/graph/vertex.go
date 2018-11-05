@@ -3,6 +3,7 @@ package graph
 
 import (
 	"context"
+	"time"
 
 	net "github.com/libp2p/go-libp2p-net"
 	casm "github.com/lthibault/casm/pkg"
@@ -13,7 +14,8 @@ import (
 var _ Vertex = &vertex{}
 
 const (
-	pathEdge = "/edge"
+	pathEdgeData = "/edge/data"
+	pathEdgeCtrl = "/edge/ctrl"
 )
 
 // Vertex in the expander graph
@@ -29,12 +31,14 @@ type vertex struct {
 	h    casm.Host
 	b    *broadcast
 	k, l uint8
+	en   *edgeNegotiator
 }
 
 func newVertex(h casm.Host) *vertex {
 	return &vertex{
-		h: h,
-		b: newBroadcaster(h.Addr()),
+		h:  h,
+		b:  newBroadcaster(h.Addr()),
+		en: newEdgeNegotiator(),
 	}
 }
 
@@ -45,7 +49,8 @@ func (v *vertex) configure(opt []Option) (err error) {
 		}
 	}
 
-	v.h.Stream().Register(pathEdge, casm.HandlerFunc(v.handleEdge))
+	v.h.Stream().Register(pathEdgeData, casm.HandlerFunc(v.initEdgeData))
+	v.h.Stream().Register(pathEdgeCtrl, casm.HandlerFunc(v.initEdgeCtrl))
 	v.h.Network().Hook().Add(v)
 
 	return
@@ -77,18 +82,16 @@ func (v vertex) In(id casm.IDer) (ok bool) {
 
 // Lease an edge slot to the specified peer
 func (v vertex) Lease(c context.Context, a casm.Addresser) error {
-	if v.In(a.Addr()) {
+	if v.In(a.Addr()) { // TODO:  ensure that Evict() clears the Host's Peerstore
 		return nil
 	}
 
-	// we want to build an edge, then add it to an edgeSet
+	e, err := negotiateEdge(c, v.h.Stream(), a)
+	if err != nil {
+		return err
+	}
 
-	// s, err := v.h.OpenStream(c, a, pathEdge)
-	// if err != nil {
-	// 	return errors.Wrap(err, "open stream")
-	// }
-
-	panic("Lease NOT IMPLEMENTED")
+	panic("do something with edge")
 }
 
 // Evict the specified peer from the vertex, closing all connections
@@ -96,8 +99,35 @@ func (v vertex) Evict(id casm.IDer) {
 	panic("Evict NOT IMPLEMENTED")
 }
 
-func (v vertex) handleEdge(s casm.Stream) {
+func (v vertex) initEdgeData(s casm.Stream) {
+	c, cancel := context.WithTimeout(s.Context(), time.Second*10)
+	defer cancel()
+	defer v.en.Clear(s.RemotePeer())
 
+	select {
+	case <-s.Context().Done():
+	case <-c.Done():
+	case v.en.ProvideDataStream(s.RemotePeer()) <- s:
+	}
+}
+
+func (v vertex) initEdgeCtrl(s casm.Stream) {
+	c, cancel := context.WithTimeout(s.Context(), time.Second*10)
+	defer cancel()
+	defer v.en.Clear(s.RemotePeer())
+
+	select {
+	case <-s.Context().Done():
+	case <-c.Done():
+	case ds, ok := <-v.en.WaitDataStream(s.RemotePeer()):
+		if !ok {
+			s.Close()
+			return
+		}
+
+		e := newEdge(ds, s)
+		panic("do something with edge")
+	}
 }
 
 /* Implement NetHook */
