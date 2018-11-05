@@ -31,21 +31,30 @@ type vertex struct {
 	k, l uint8
 }
 
-// New Vertex
-func New(h casm.Host, opt ...Option) (v Vertex, err error) {
-	vtx := &vertex{h: h, b: newBroadcaster(h.Addr())}
+func newVertex(h casm.Host) *vertex {
+	return &vertex{
+		h: h,
+		b: newBroadcaster(h.Addr()),
+	}
+}
 
+func (v *vertex) configure(opt []Option) (err error) {
 	for _, o := range append([]Option{OptDefault()}, opt...) {
-		if err = o(vtx); err != nil {
+		if err = o(v); err != nil {
 			break
 		}
 	}
 
-	h.Stream().Register(pathEdge, casm.HandlerFunc(vtx.handleEdge))
-	h.Network().Hook().Add(vtx)
+	v.h.Stream().Register(pathEdge, casm.HandlerFunc(v.handleEdge))
+	v.h.Network().Hook().Add(v)
 
-	v = vtx
 	return
+}
+
+// New Vertex
+func New(h casm.Host, opt ...Option) (Vertex, error) {
+	v := newVertex(h)
+	return v, v.configure(opt)
 }
 
 // Addr returns the Vertex's network address
@@ -88,7 +97,7 @@ func (v vertex) Evict(id casm.IDer) {
 }
 
 func (v vertex) handleEdge(s casm.Stream) {
-	panic("handleEdge NOT IMPLEMENTED")
+
 }
 
 /* Implement NetHook */
