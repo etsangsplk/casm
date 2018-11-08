@@ -29,8 +29,8 @@ type Vertex interface {
 // vertex is a concrete Vertex
 type vertex struct {
 	h    casm.Host
-	b    *broadcast
 	k, l uint8
+	b    *broadcast
 	en   *edgeNegotiator
 }
 
@@ -87,16 +87,18 @@ func (v vertex) Lease(c context.Context, a casm.Addresser) error {
 	}
 
 	e, err := negotiateEdge(c, v.h.Stream(), a)
-	if err != nil {
-		return err
+	if err == nil {
+		v.b.AddEdge(e)
 	}
 
-	panic("do something with edge")
+	return err
 }
 
 // Evict the specified peer from the vertex, closing all connections
 func (v vertex) Evict(id casm.IDer) {
-	panic("Evict NOT IMPLEMENTED")
+	if e, ok := v.b.RemoveEdge(id); ok {
+		e.Close()
+	}
 }
 
 func (v vertex) initEdgeData(s casm.Stream) {
@@ -125,8 +127,7 @@ func (v vertex) initEdgeCtrl(s casm.Stream) {
 			return
 		}
 
-		e := newEdge(ds, s)
-		panic("do something with edge")
+		v.b.AddEdge(newEdge(newStreamGroup(ds, s)))
 	}
 }
 

@@ -19,6 +19,16 @@ type mockStream struct {
 	rpid casm.IDer
 }
 
+func newStream(rw io.ReadWriter) *mockStream {
+	c, cancel := context.WithCancel(context.Background())
+	return &mockStream{
+		c:          c,
+		cancel:     cancel,
+		ReadWriter: rw,
+		rpid:       casm.NewID(),
+	}
+}
+
 func (m mockStream) Context() context.Context { return m.c }
 func (m mockStream) CloseWrite() error        { return nil }
 func (m mockStream) Close() error {

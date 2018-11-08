@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"io"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -9,6 +10,20 @@ import (
 	casm "github.com/lthibault/casm/pkg"
 	capnp "zombiezen.com/go/capnproto2"
 )
+
+var _ Messager = &message{} // type-constraint
+
+// Messager is a generic broadcast message
+type Messager interface {
+	casm.IDer
+	Sequence() uint64
+	Header() []byte
+	Body() []byte
+	Ref()
+	Free()
+	WriteTo(io.Writer) (int64, error)
+	ReadFrom(io.Reader) (int64, error)
+}
 
 type messagePool sync.Pool
 
@@ -71,6 +86,13 @@ func (m *message) Free() {
 	if atomic.AddUint32(&m.ctr, ^uint32(0)) == 0 {
 		msgPool.Put(m)
 	}
+}
+
+func (m *message) WriteTo(w io.Writer) (int64, error) {
+	panic("WriteTo NOT IMPLEMENTED")
+}
+func (m *message) ReadFrom(r io.Reader) (int64, error) {
+	panic("ReadFrom NOT IMPLEMENTED")
 }
 
 type messageFactory func([]byte) *message
