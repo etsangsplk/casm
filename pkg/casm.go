@@ -2,15 +2,7 @@
 package casm
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
-	"io"
-	"sync"
-
-	"github.com/emirpasic/gods/maps"
-	"github.com/emirpasic/gods/maps/hashbidimap"
-	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/libp2p/go-libp2p-peerstore"
 
@@ -20,10 +12,6 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
 	"github.com/pkg/errors"
-)
-
-const (
-	protoConnHdr = "/cxn"
 )
 
 // NetHookManager can add and remove nethooks from a Host
@@ -56,106 +44,11 @@ type Host interface {
 	Stream() StreamManager
 }
 
-type idMap struct {
-	sync.RWMutex
-	m maps.BidiMap
-}
-
-func newIDMap() *idMap { return &idMap{m: hashbidimap.New()} }
-
-func (m *idMap) Get(id IDer) (hid peer.ID, ok bool) {
-	m.RLock()
-	defer m.RUnlock()
-
-	var v interface{}
-	if v, ok = m.m.Get(id.ID()); ok {
-		hid = v.(peer.ID)
-	}
-
-	return
-}
-
-func (m *idMap) GetKey(hid peer.ID) (id PeerID, ok bool) {
-	m.RLock()
-	defer m.RUnlock()
-
-	var v interface{}
-	if v, ok = m.m.GetKey(hid); ok {
-		id = v.(PeerID)
-	}
-
-	return
-}
-
-func (m *idMap) Set(id IDer, hid peer.ID) {
-	m.Lock()
-	m.m.Put(id.ID(), hid)
-	m.Unlock()
-}
-
-func (m *idMap) Del(id IDer) {
-	m.Lock()
-	m.m.Remove(id.ID())
-	m.Unlock()
-}
-
-func (m *idMap) DelKey(v peer.ID) {
-	m.Lock()
-	if k, ok := m.m.GetKey(v); ok {
-		m.m.Remove(k)
-	}
-	m.Unlock()
-}
-
-type idNetHook struct {
-	IDer
-	*idMap
-}
-
-func (h idNetHook) Listen(net.Network, ma.Multiaddr)      {}
-func (h idNetHook) ListenClose(net.Network, ma.Multiaddr) {}
-func (h idNetHook) OpenedStream(net.Network, net.Stream)  {}
-func (h idNetHook) ClosedStream(net.Network, net.Stream)  {}
-
-func (h idNetHook) Connected(_ net.Network, conn net.Conn) {
-	s, err := conn.NewStream()
-	if err != nil {
-		conn.Close()
-	}
-	defer s.Reset()
-
-	s.SetProtocol(protoConnHdr)
-
-	switch conn.Stat().Direction {
-	case net.DirOutbound:
-		b := make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(h.ID()))
-		if _, err = io.Copy(s, bytes.NewBuffer(b)); err != nil {
-			conn.Close()
-		}
-	case net.DirInbound:
-		r := io.LimitReader(s, 8)
-		buf := new(bytes.Buffer)
-		if _, err = io.Copy(buf, r); err != nil {
-			conn.Close()
-		}
-
-		h.Set(PeerID(binary.BigEndian.Uint64(buf.Bytes())), conn.RemotePeer())
-	case net.DirUnknown:
-		panic("unknown direction")
-	}
-}
-
-// called when a connection closed
-func (h idNetHook) Disconnected(_ net.Network, conn net.Conn) {
-	h.DelKey(conn.RemotePeer())
-}
-
 type basicHost struct {
-	a     Addr
-	c     context.Context
-	h     host.Host
-	idmap *idMap
+	a  Addr
+	c  context.Context
+	h  host.Host
+	ym *yMap
 }
 
 // New Host whose lifetime is bound to the context c.
@@ -168,7 +61,7 @@ func New(c context.Context, opt ...Option) (Host, error) {
 	popt := defaultP2pOpts()
 	popt.Load(opt)
 
-	h := &basicHost{c: c, idmap: newIDMap()}
+	h := &basicHost{c: c, ym: newYMap()}
 
 	if h.h, err = libp2p.New(c, popt...); err != nil {
 		return nil, errors.Wrap(err, "libp2p")
@@ -176,7 +69,7 @@ func New(c context.Context, opt ...Option) (Host, error) {
 
 	pa := host.PeerInfoFromHost(h.h)
 	h.a = &addr{IDer: NewID(), l: HostLabel(pa.ID), as: pa.Addrs}
-	h.Add(&idNetHook{IDer: h.a.Addr(), idMap: h.idmap})
+	h.Add(newCtxHook(c, h.a.Addr(), h.ym))
 
 	for _, o := range copt {
 		if err = o.Apply(h); err != nil {
@@ -190,10 +83,16 @@ func New(c context.Context, opt ...Option) (Host, error) {
 // Context to which the Host is bound
 func (bh basicHost) Context() context.Context { return bh.c }
 func (bh basicHost) Addr() Addr               { return bh.a }
+
 func (bh basicHost) PeerAddr(id IDer) (a Addr, ok bool) {
-	var hid peer.ID
-	if hid, ok = bh.idmap.Get(id); ok {
-		a = &addr{IDer: id, l: HostLabel(hid), as: bh.h.Peerstore().Addrs(hid)}
+	var c context.Context
+	if c, ok = bh.ym.Get(id); ok {
+		hid := getHID(c)
+		a = &addr{
+			IDer: id,
+			l:    HostLabel(hid),
+			as:   bh.h.Peerstore().Addrs(hid),
+		}
 	}
 	return
 }
@@ -208,12 +107,12 @@ func (bh basicHost) Stream() StreamManager { return bh }
 
 func (bh basicHost) Register(path string, h Handler) {
 	bh.h.SetStreamHandler(protocol.ID(path), func(s net.Stream) {
-		id, ok := bh.idmap.GetKey(s.Conn().RemotePeer())
+		c, ok := bh.ym.Get(s.Conn().RemotePeer())
 		if !ok {
-			panic("should have PeerID in idmap")
+			panic("should have context in yMap")
 		}
 
-		strm := newStream(bh.c, id, s)
+		strm := newStream(c, s)
 		defer strm.Close()
 		h.ServeStream(strm)
 	})
@@ -229,14 +128,14 @@ func (bh basicHost) Open(c context.Context, a Addresser, path string) (Stream, e
 		return nil, errors.Wrap(err, "libp2p")
 	}
 
-	id, ok := bh.idmap.GetKey(s.Conn().RemotePeer())
+	c, ok := bh.ym.Get(s.Conn().RemotePeer())
 	if !ok {
-		panic("should have PeerID in idmap")
+		panic("should have PeerID in yMap")
 	}
 
 	// pass host's context because context `c` is the stream-open context.  It
 	// may contain timeouts.
-	return newStream(bh.c, id, s), nil
+	return newStream(c, s), nil
 }
 
 /*
@@ -244,7 +143,7 @@ func (bh basicHost) Open(c context.Context, a Addresser, path string) (Stream, e
 */
 
 func (bh basicHost) Connect(c context.Context, a Addresser) error {
-	bh.idmap.Set(a.Addr(), peer.ID(a.Addr().Label()))
+	bh.ym.Put(bh.c, a.Addr(), peer.ID(a.Addr().Label()))
 
 	return bh.h.Connect(c, peerstore.PeerInfo{
 		ID:    peer.ID(a.Addr().Label()),

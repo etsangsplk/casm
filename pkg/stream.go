@@ -44,23 +44,23 @@ type HandlerFunc func(Stream)
 func (h HandlerFunc) ServeStream(s Stream) { h(s) }
 
 type stream struct {
-	c context.Context
-	IDer
+	c      context.Context
 	cancel func()
 	net.Stream
 }
 
-func newStream(c context.Context, id IDer, s net.Stream) (str *stream) {
+func newStream(c context.Context, s net.Stream) (str *stream) {
 	str = new(stream)
 	if cxr, ok := s.(contexter); ok {
 		str.c = cxr.Context()
 	} else {
 		str.c, str.cancel = context.WithCancel(c)
 	}
-	str.IDer = id
 	str.Stream = s
 	return
 }
+
+func (s stream) ID() PeerID { return getID(s.c) }
 
 func (s stream) Context() context.Context {
 	if c, ok := s.Stream.(contexter); ok {
