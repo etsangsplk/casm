@@ -3,9 +3,10 @@ package graph
 import (
 	"context"
 	"io"
+	"net"
 	"sync"
+	"time"
 
-	"github.com/SentimensRG/ctx"
 	"github.com/SentimensRG/ctx/mergectx"
 	casm "github.com/lthibault/casm/pkg"
 	"golang.org/x/sync/errgroup"
@@ -52,33 +53,77 @@ func (mc multiCloser) Close() error {
 type syncStream struct {
 	sync.RWMutex
 	casm.Stream
+	c      context.Context
+	cancel func()
 }
+
+func (s *syncStream) maybeTemporary(err error) {
+	if err, ok := err.(net.Error); ok && !err.Temporary() {
+		s.cancel()
+	}
+}
+
+func (s *syncStream) Context() context.Context { return s.c }
 
 func (s *syncStream) CloseWrite() (err error) {
 	s.Lock()
-	err = s.Stream.CloseWrite()
+	if err = s.Stream.CloseWrite(); err != nil {
+		s.maybeTemporary(err)
+	}
 	s.Unlock()
 	return
 }
 
 func (s *syncStream) Read(b []byte) (n int, err error) {
 	s.RLock()
-	n, err = s.Stream.Read(b)
+	if n, err = s.Stream.Read(b); err != nil {
+		s.maybeTemporary(err)
+	}
 	s.RUnlock()
 	return
 }
 
 func (s *syncStream) Write(b []byte) (n int, err error) {
 	s.RLock()
-	n, err = s.Stream.Write(b)
+	if n, err = s.Stream.Write(b); err != nil {
+		s.maybeTemporary(err)
+	}
 	s.RUnlock()
 	return
 }
 
 func (s *syncStream) Close() (err error) {
+	s.cancel()
 	s.Lock()
 	err = s.Stream.Close()
 	s.Unlock()
+	return
+}
+
+func (s *syncStream) SetDeadline(t time.Time) (err error) {
+	s.RLock()
+	if err = s.Stream.SetDeadline(t); err != nil {
+		s.maybeTemporary(err)
+	}
+	s.RUnlock()
+	return
+}
+
+func (s *syncStream) SetReadDeadline(t time.Time) (err error) {
+	s.RLock()
+	if err = s.Stream.SetReadDeadline(t); err != nil {
+		s.maybeTemporary(err)
+	}
+	s.RUnlock()
+	return
+}
+
+func (s *syncStream) SetWriteDeadline(t time.Time) (err error) {
+	s.RLock()
+	if err = s.Stream.SetWriteDeadline(t); err != nil {
+		s.maybeTemporary(err)
+	}
+	s.RUnlock()
 	return
 }
 
@@ -92,20 +137,14 @@ func newStreamGroup(data, ctrl casm.Stream) *streamGrp {
 	c := mergectx.Link(data.Context(), ctrl.Context())
 	c, cancel := context.WithCancel(c)
 
-	synData := &syncStream{Stream: data}
-	synCtrl := &syncStream{Stream: ctrl}
-
-	ma := newMultiCloser(synData, synCtrl)
-	ctx.Defer(c, func() {
-		cancel()
-		ma.Close()
-	})
+	synData := &syncStream{Stream: data, c: c, cancel: cancel}
+	synCtrl := &syncStream{Stream: ctrl, c: c, cancel: cancel}
 
 	return &streamGrp{
 		c:      c,
 		data:   synData,
 		ctrl:   synCtrl,
-		Closer: ma,
+		Closer: newMultiCloser(synData, synCtrl),
 	}
 }
 

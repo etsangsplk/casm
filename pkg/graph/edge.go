@@ -116,21 +116,20 @@ func newEdge(g streamGroup) *edge {
 	panic("newEdge NOT IMPLEMENTED")
 }
 
-// func (e edge) Context() context.Context { return e.c }
-// func (e *edge) Pipe() Pipe              { return e }
-// func (e *edge) API() EdgeAPI            { return e.api }
-// func (e edge) RemotePeer() casm.PeerID  { return e.data.RemotePeer() }
+func (e edge) Context() context.Context { panic("function NOT IMPLEMENTED") }
+func (e *edge) Pipe() Pipe              { panic("function NOT IMPLEMENTED") }
+func (e *edge) API() EdgeAPI            { panic("function NOT IMPLEMENTED") }
+func (e edge) RemotePeer() casm.PeerID  { panic("function NOT IMPLEMENTED") }
 
-// func (e edge) Close() error {
-// 	e.cancel()
-// 	return e.Closer.Close()
-// }
+func (e edge) Close() error {
+	panic("function NOT IMPLEMENTED")
+}
 
-// func (e edge) Read(b []byte) (n int, err error)   { return e.data.Read(b) }
-// func (e edge) Write(b []byte) (n int, err error)  { return e.data.Write(b) }
-// func (e edge) SetDeadline(t time.Time) error      { return e.data.SetDeadline(t) }
-// func (e edge) SetReadDeadline(t time.Time) error  { return e.data.SetReadDeadline(t) }
-// func (e edge) SetWriteDeadline(t time.Time) error { return e.data.SetWriteDeadline(t) }
+func (e edge) Read(b []byte) (n int, err error)   { panic("function NOT IMPLEMENTED") }
+func (e edge) Write(b []byte) (n int, err error)  { panic("function NOT IMPLEMENTED") }
+func (e edge) SetDeadline(t time.Time) error      { panic("function NOT IMPLEMENTED") }
+func (e edge) SetReadDeadline(t time.Time) error  { panic("function NOT IMPLEMENTED") }
+func (e edge) SetWriteDeadline(t time.Time) error { panic("function NOT IMPLEMENTED") }
 
 type edgeNegotiator struct {
 	sync.Mutex

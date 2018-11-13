@@ -50,16 +50,31 @@ func TestMultiCloser(t *testing.T) {
 
 func TestStreamGroup(t *testing.T) {
 	t.Run("TopDownClose", func(t *testing.T) {
-		t.Error("NOT IMPLEMENTED")
+		sg := newStreamGroup(newStream(nil), newStream(nil))
+		assert.NoError(t, sg.Close())
+
+		assert.Error(t, sg.Context().Err())
+		assert.Error(t, sg.data.Context().Err())
+		assert.Error(t, sg.ctrl.Context().Err())
 	})
 
 	t.Run("BottomUpClose", func(t *testing.T) {
 		t.Run("Data", func(t *testing.T) {
-			t.Error("NOT IMPLEMENTED")
+			sg := newStreamGroup(newStream(nil), newStream(nil))
+			assert.NoError(t, sg.data.Close())
+
+			assert.Error(t, sg.Context().Err())
+			assert.Error(t, sg.data.Context().Err())
+			assert.Error(t, sg.ctrl.Context().Err())
 		})
 
 		t.Run("Ctrl", func(t *testing.T) {
-			t.Error("NOT IMPLEMENTED")
+			sg := newStreamGroup(newStream(nil), newStream(nil))
+			assert.NoError(t, sg.ctrl.Close())
+
+			assert.Error(t, sg.Context().Err())
+			assert.Error(t, sg.data.Context().Err())
+			assert.Error(t, sg.ctrl.Context().Err())
 		})
 	})
 }
