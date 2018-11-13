@@ -9,6 +9,10 @@ import (
 	net "github.com/libp2p/go-libp2p-net"
 )
 
+type contexter interface {
+	Context() context.Context
+}
+
 // Stream is a bidirectional connection between two hosts.  Callers MUST call
 // Close before discarding the stream.
 type Stream interface {
@@ -48,13 +52,23 @@ type stream struct {
 
 func newStream(c context.Context, id IDer, s net.Stream) (str *stream) {
 	str = new(stream)
-	str.c, str.cancel = context.WithCancel(c)
+	if cxr, ok := s.(contexter); ok {
+		str.c = cxr.Context()
+	} else {
+		str.c, str.cancel = context.WithCancel(c)
+	}
 	str.IDer = id
 	str.Stream = s
 	return
 }
 
-func (s stream) Context() context.Context { return s.c }
+func (s stream) Context() context.Context {
+	if c, ok := s.Stream.(contexter); ok {
+		return c.Context()
+	}
+
+	return s.c
+}
 
 func (s stream) RemotePeer() PeerID { return s.ID() }
 
@@ -64,7 +78,9 @@ func (s stream) CloseWrite() error { return s.Stream.Close() }
 
 // Close *MUST* be called before discarding the stream
 func (s stream) Close() error {
-	s.cancel()
+	if _, ok := s.Stream.(contexter); !ok {
+		s.cancel()
+	}
 	return s.Reset()
 }
 
@@ -83,7 +99,30 @@ func (s stream) Write(b []byte) (n int, err error) {
 }
 
 func (s stream) maybePermanent(err error) {
-	if err, ok := err.(gonet.Error); ok && !err.Temporary() {
-		s.cancel()
+	if _, ok := s.Stream.(contexter); ok {
+		if err, ok := err.(gonet.Error); ok && !err.Temporary() {
+			s.cancel()
+		}
 	}
+}
+
+func (s stream) SetDeadline(t time.Time) (err error) {
+	if err = s.Stream.SetDeadline(t); err != nil {
+		s.maybePermanent(err)
+	}
+	return
+}
+
+func (s stream) SetReadDeadline(t time.Time) (err error) {
+	if err = s.Stream.SetReadDeadline(t); err != nil {
+		s.maybePermanent(err)
+	}
+	return
+}
+
+func (s stream) SetWriteDeadline(t time.Time) (err error) {
+	if err = s.Stream.SetWriteDeadline(t); err != nil {
+		s.maybePermanent(err)
+	}
+	return
 }
