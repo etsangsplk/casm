@@ -65,15 +65,6 @@ func (s *syncStream) maybeTemporary(err error) {
 
 func (s *syncStream) Context() context.Context { return s.c }
 
-func (s *syncStream) CloseWrite() (err error) {
-	s.Lock()
-	if err = s.Stream.CloseWrite(); err != nil {
-		s.maybeTemporary(err)
-	}
-	s.Unlock()
-	return
-}
-
 func (s *syncStream) Read(b []byte) (n int, err error) {
 	s.RLock()
 	if n, err = s.Stream.Read(b); err != nil {

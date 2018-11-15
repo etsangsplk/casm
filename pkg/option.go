@@ -1,74 +1,83 @@
 package casm
 
 import (
-	"github.com/libp2p/go-libp2p"
-	net "github.com/libp2p/go-libp2p-net"
-	"github.com/libp2p/go-libp2p/config"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"math/big"
+	"time"
 
-	ma "github.com/multiformats/go-multiaddr"
+	"github.com/lthibault/casm/pkg/transport/quic"
 )
 
-// NetHook is a set of callbacks that are invoked according to network changes
-type NetHook = net.Notifiee
-
 // Option represents a setting
-type Option interface {
-	opt()
-}
+type Option func(*basicHost) Option
 
-/***************************************
-Adapters for libp2p Host options
-****************************************/
-
-// p2pOpt allows for the annotation of libp2p Options so that they can be
-// recognized by New() and passed to libp2p.New().
-type p2pOpt func(*config.Config) error
-
-func (p2pOpt) opt() {}
-
-type p2pOptions []libp2p.Option
-
-func defaultP2pOpts() p2pOptions {
-	return []libp2p.Option{}
-}
-
-func (h *p2pOptions) Load(opt []Option) {
-	for _, o := range opt {
-		if op, ok := o.(p2pOpt); ok {
-			*h = append(*h, libp2p.Option(op))
-		}
+// OptListenAddr sets the listen address
+func OptListenAddr(addr string) Option {
+	return func(h *basicHost) (prev Option) {
+		h.addr.addr = addr
+		return
 	}
 }
 
-// OptListenAddrStrings configures the CASM host to listen on the given multiaddrs
-func OptListenAddrStrings(s ...string) Option {
-	return p2pOpt(libp2p.ListenAddrStrings(s...))
-}
-
-// OptListenAddrs configures the CASM host to listen on the given multiaddrs
-func OptListenAddrs(addrs ...ma.Multiaddr) Option {
-	return p2pOpt(libp2p.ListenAddrs(addrs...))
-}
-
-/************************
-	CASM Host options
-*************************/
-
-type hostOpt func(*basicHost) error
-
-func (hostOpt) opt()                   {}
-func (opt hostOpt) Apply(h Host) error { return opt(h.(*basicHost)) }
-
-type hostOptions []hostOpt
-
-func defaultHostOpts() hostOptions {
-	return []hostOpt{}
-}
-
-func (h *hostOptions) Load(opt []Option) {
-	for _, o := range opt {
-		if op, ok := o.(hostOpt); ok {
-			*h = append(*h, op)
-		}
+// OptTransport sets the transport
+func OptTransport(t Transport) Option {
+	return func(h *basicHost) (prev Option) {
+		h.t = t
+		return
 	}
+}
+
+func optSetID() Option {
+	return func(h *basicHost) (prev Option) {
+		prev = optSetID()
+		h.addr.IDer = NewID()
+		return
+	}
+}
+
+func defaultOpts(qc *quic.Config, tc *tls.Config) []Option {
+	t := quic.NewTransport(quic.OptQuic(qc), quic.OptTLS(tc))
+	return []Option{
+		optSetID(),
+		OptListenAddr("localhost:1987"),
+		OptTransport(t),
+	}
+}
+
+func generateTLSConfig() *tls.Config {
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		panic(err)
+	}
+
+	// generate a random serial number (a real cert authority would have some logic behind this)
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		panic("failed to generate serial number: " + err.Error())
+	}
+
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		// SignatureAlgorithm:    x509.ECDSAWithSHA512,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Hour * 87600), // in 10 years
+		BasicConstraintsValid: true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		panic(err)
+	}
+	return &tls.Config{Certificates: []tls.Certificate{tlsCert}, InsecureSkipVerify: true}
 }

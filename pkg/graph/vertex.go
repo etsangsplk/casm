@@ -76,8 +76,7 @@ func (v *vertex) Edge() Neighborhood { return v }
 
 // In returns true if the vertex has an edge to the specified peer
 func (v vertex) In(id casm.IDer) (ok bool) {
-	_, ok = v.h.PeerAddr(id)
-	return
+	panic("In NOT IMPLEMENTED")
 }
 
 // Lease an edge slot to the specified peer

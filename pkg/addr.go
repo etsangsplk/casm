@@ -3,10 +3,9 @@ package casm
 import (
 	"fmt"
 	"math/rand"
+	"net"
 	"strconv"
 	"time"
-
-	ma "github.com/multiformats/go-multiaddr"
 )
 
 func init() { rand.Seed(time.Now().UTC().UnixNano()) }
@@ -47,17 +46,15 @@ type Addresser interface {
 // Addr of a Host
 type Addr interface {
 	IDer
-	Label() HostLabel
 	Addr() Addr
-	MultiAddrs() []ma.Multiaddr
+	net.Addr
 }
 
 type addr struct {
 	IDer
-	l  HostLabel
-	as []ma.Multiaddr
+	addr string
 }
 
-func (a addr) Label() HostLabel           { return a.l }
-func (a addr) Addr() Addr                 { return a }
-func (a addr) MultiAddrs() []ma.Multiaddr { return a.as }
+func (a addr) Addr() Addr      { return a }
+func (a addr) Network() string { return "udp" }
+func (a addr) String() string  { return a.addr }
