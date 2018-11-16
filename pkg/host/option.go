@@ -46,7 +46,7 @@ func maybeMkQUIC() Option {
 			tc := generateTLSConfig()
 			qc := defaultQUIC()
 
-			h.t = quic.NewTransport(h.id, quic.OptQuic(qc), quic.OptTLS(tc))
+			h.t = quic.New(h.id, quic.OptQuic(qc), quic.OptTLS(tc))
 		}
 		return
 	}
