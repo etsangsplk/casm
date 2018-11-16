@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/SentimensRG/ctx"
 	net "github.com/lthibault/casm/pkg/net"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
@@ -114,17 +115,62 @@ func (s stream) Endpoint() net.EndpointPair { return s.EndpointPair }
 
 // Transport over QUIC
 type Transport struct {
+	net.IDer
 	q *Config
 	t *tls.Config
 }
 
 // Dial the specified address
 func (t *Transport) Dial(c context.Context, a net.Addr) (conn net.Conn, err error) {
-	var s quic.Session
-	if s, err = quic.DialAddrContext(c, a.String(), t.t, t.q); err != nil {
+	var sess quic.Session
+	if sess, err = quic.DialAddrContext(c, a.String(), t.t, t.q); err != nil {
 		err = errors.Wrap(err, "dial")
-	} else if conn, err = mkConn(s).Negotiate(c, a); err != nil {
+	} else if conn, err = mkConn(sess).Negotiate(c, a); err != nil {
 		err = errors.Wrap(err, "negotiate")
+	}
+
+	return
+}
+
+// Listen on the specified address
+func (t *Transport) Listen(c context.Context, a net.Addr) (net.Listener, error) {
+	l, err := quic.ListenAddr(a.String(), t.t, t.q)
+	if l != nil {
+		return nil, err
+	}
+	ctx.Defer(c, func() { l.Close() })
+
+	return &listener{Listener: l, IDer: t.ID()}, nil
+}
+
+type listener struct {
+	net.IDer
+	quic.Listener
+}
+
+func (l listener) Accept(c context.Context) (conn net.Conn, err error) {
+	cherr := make(chan error) // TODO:  sync.Pool
+
+	var sess quic.Session
+
+	go func() {
+		var e error
+		sess, e = l.Listener.Accept()
+
+		select {
+		case <-c.Done():
+		case cherr <- errors.Wrap(e, "accept quic"):
+		}
+	}()
+
+	select {
+	case <-c.Done():
+		err = c.Err()
+	case err = <-cherr:
+		if err != nil {
+			conn, err = mkConn(sess).Negotiate(c, l.ID())
+			err = errors.Wrap(err, "negotiate")
+		}
 	}
 
 	return
@@ -152,8 +198,8 @@ func OptTLS(tc *tls.Config) Option {
 }
 
 // NewTransport over QUIC
-func NewTransport(opt ...Option) *Transport {
-	t := new(Transport)
+func NewTransport(id net.IDer, opt ...Option) *Transport {
+	t := &Transport{IDer: id.ID()}
 	for _, o := range opt {
 		o(t)
 	}

@@ -10,6 +10,14 @@ import (
 // ErrorCode is used to terminate a connection and signal an error
 type ErrorCode uint16
 
+// Listener can listen for incoming connections
+type Listener interface {
+	// Close the server
+	Close() error
+	// Accept returns new connections; this should be called in a loop.
+	Accept(context.Context) (Conn, error)
+}
+
 // Conn represents a logical connection between two peers.  Streams are
 // multiplexed onto connections
 type Conn interface {
