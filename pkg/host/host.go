@@ -104,6 +104,10 @@ func (bh *basicHost) ListenAndServe(c context.Context) error {
 			} else if err = bh.peers.Add(conn); err != nil {
 				// TODO:  this should be logged too
 				panic(err)
+			} else {
+				ctx.Defer(conn.Context(), func() {
+					bh.Disconnect(conn.Endpoint().Remote())
+				})
 			}
 		}
 	}()
@@ -167,14 +171,8 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 	Implement Network
 */
 
-func dial(c context.Context, t net.Transport, a net.Addr) (net.Conn, error) {
-	header := make([]byte, 8) // consider sync.Pool
-	binary.BigEndian.PutUint64(header, uint64(a.ID()))
-	return t.Dial(context.WithValue(c, keyListenAddr, a), a)
-}
-
 func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
-	conn, err := dial(c, bh.t, a.Addr())
+	conn, err := bh.t.Dial(c, a.Addr())
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}
@@ -183,7 +181,10 @@ func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 }
 
 func (bh basicHost) Disconnect(id net.IDer) {
-	bh.peers.Del(id.ID())
+	if conn, ok := bh.peers.Del(id.ID()); ok {
+		// TODO: log error
+		conn.Close()
+	}
 }
 
 type peerStore struct {
@@ -213,10 +214,12 @@ func (p *peerStore) Get(id net.IDer) (c net.Conn, err error) {
 	return
 }
 
-func (p *peerStore) Del(id net.IDer) {
+func (p *peerStore) Del(id net.IDer) (conn net.Conn, ok bool) {
 	p.Lock()
+	conn, ok = p.m[id.ID()]
 	delete(p.m, id.ID())
 	p.Unlock()
+	return
 }
 
 type radixRouter radix.Tree

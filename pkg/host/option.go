@@ -6,12 +6,6 @@ import (
 	"github.com/lthibault/casm/pkg/transport/quic"
 )
 
-type ctxKey uint16
-
-const (
-	keyListenAddr ctxKey = iota
-)
-
 // Option represents a setting
 type Option func(*basicHost) Option
 

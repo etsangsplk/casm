@@ -26,6 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	log.Println("registering stream")
 	h0.Stream().Register("/echo", net.HandlerFunc(func(s net.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
@@ -47,6 +48,7 @@ func main() {
 		}
 	}))
 
+	log.Println("connecting")
 	// Connect the hosts to each other
 	if err = h0.Network().Connect(context.Background(), h1); err != nil {
 		log.Fatal(err)
