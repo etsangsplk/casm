@@ -7,6 +7,7 @@ import (
 	"time"
 
 	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -33,12 +34,12 @@ type Edge interface {
 }
 
 type streamOpener interface {
-	Open(context.Context, casm.Addresser, string) (casm.Stream, error)
+	Open(context.Context, casm.Addresser, string) (net.Stream, error)
 }
 
 func negotiateEdge(c context.Context, o streamOpener, a casm.Addresser) (Edge, error) {
 	var g *errgroup.Group
-	var data, ctrl casm.Stream
+	var data, ctrl net.Stream
 
 	g, c = errgroup.WithContext(c)
 	g.Go(func() (err error) {
@@ -56,7 +57,7 @@ func negotiateEdge(c context.Context, o streamOpener, a casm.Addresser) (Edge, e
 
 	if err := errors.Wrap(g.Wait(), "open stream"); err != nil {
 		// If one stream failed to open, close the other
-		for _, s := range []casm.Stream{data, ctrl} {
+		for _, s := range []net.Stream{data, ctrl} {
 			if s != nil {
 				s.Close()
 			}
@@ -98,14 +99,14 @@ func negotiateEdge(c context.Context, o streamOpener, a casm.Addresser) (Edge, e
 
 // type threadSafeStream struct {
 // 	sync.RWMutex
-// 	s casm.Stream
+// 	s net.Stream
 // }
 
 // type api struct {
-// 	s casm.Stream
+// 	s net.Stream
 // }
 
-// func newAPI(s casm.Stream) *api {
+// func newAPI(s net.Stream) *api {
 // 	return &api{s: s}
 // }
 
@@ -133,11 +134,11 @@ func (e edge) SetWriteDeadline(t time.Time) error { panic("function NOT IMPLEMEN
 
 type edgeNegotiator struct {
 	sync.Mutex
-	m map[casm.PeerID]chan casm.Stream
+	m map[casm.PeerID]chan net.Stream
 }
 
 func newEdgeNegotiator() *edgeNegotiator {
-	return &edgeNegotiator{m: make(map[casm.PeerID]chan casm.Stream)}
+	return &edgeNegotiator{m: make(map[casm.PeerID]chan net.Stream)}
 }
 
 func (n *edgeNegotiator) Clear(id casm.IDer) {
@@ -149,22 +150,22 @@ func (n *edgeNegotiator) Clear(id casm.IDer) {
 	n.Unlock()
 }
 
-func (n *edgeNegotiator) maybeInitUnsafe(id casm.PeerID) (ch chan casm.Stream) {
+func (n *edgeNegotiator) maybeInitUnsafe(id casm.PeerID) (ch chan net.Stream) {
 	var ok bool
 	if ch, ok = n.m[id]; !ok {
-		ch = make(chan casm.Stream)
+		ch = make(chan net.Stream)
 		n.m[id] = ch
 	}
 	return
 }
 
-func (n *edgeNegotiator) ProvideDataStream(id casm.IDer) chan<- casm.Stream {
+func (n *edgeNegotiator) ProvideDataStream(id casm.IDer) chan<- net.Stream {
 	n.Lock()
 	defer n.Unlock()
 	return n.maybeInitUnsafe(id.ID())
 }
 
-func (n *edgeNegotiator) WaitDataStream(id casm.IDer) <-chan casm.Stream {
+func (n *edgeNegotiator) WaitDataStream(id casm.IDer) <-chan net.Stream {
 	n.Lock()
 	defer n.Unlock()
 	return n.maybeInitUnsafe(id.ID())

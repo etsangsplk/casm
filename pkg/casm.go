@@ -3,7 +3,6 @@ package casm
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -12,12 +11,16 @@ import (
 
 func init() { rand.Seed(time.Now().UTC().UnixNano()) }
 
-// PeerID uniquely identifies a host instance
-type PeerID = net.PeerID
+type (
+	// PeerID uniquely identifies a host instance
+	PeerID = net.PeerID
+
+	// IDer can provide a PeerID
+	IDer = net.IDer
+)
 
 // NewID produces a random PeerID
-func NewID() PeerID              { return PeerID(rand.Uint64()) }
-func (id PeerID) String() string { return fmt.Sprintf("%016x", uint64(id)) }
+func NewID() PeerID { return PeerID(rand.Uint64()) }
 
 // Addresser can provide an Addr
 type Addresser interface {
@@ -32,16 +35,16 @@ type Network interface {
 
 // StreamManager manages streams, which are multiplexed on top of raw connections
 type StreamManager interface {
-	Register(string, Handler)
+	Register(string, net.Handler)
 	Unregister(string)
-	Open(context.Context, Addresser, string) (Stream, error)
+	Open(context.Context, Addresser, string) (net.Stream, error)
 }
 
 // Host is a logical machine in a compute cluster.  It acts both as a server and
 // a client.  In the CASM expander-graph model, it is a vertex.
 type Host interface {
 	Context() context.Context
-	Addr() Addr
+	Addr() net.Addr
 	Network() Network
 	Stream() StreamManager
 }

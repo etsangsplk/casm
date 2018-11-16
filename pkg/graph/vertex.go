@@ -5,9 +5,8 @@ import (
 	"context"
 	"time"
 
-	net "github.com/libp2p/go-libp2p-net"
 	casm "github.com/lthibault/casm/pkg"
-	ma "github.com/multiformats/go-multiaddr"
+	net "github.com/lthibault/casm/pkg/net"
 )
 
 // compile-time type constraint
@@ -20,7 +19,7 @@ const (
 
 // Vertex in the expander graph
 type Vertex interface {
-	Addr() casm.Addr
+	Addr() net.Addr
 	Context() context.Context
 	Message() Broadcaster
 	Edge() Neighborhood
@@ -49,9 +48,8 @@ func (v *vertex) configure(opt []Option) (err error) {
 		}
 	}
 
-	v.h.Stream().Register(pathEdgeData, casm.HandlerFunc(v.initEdgeData))
-	v.h.Stream().Register(pathEdgeCtrl, casm.HandlerFunc(v.initEdgeCtrl))
-	v.h.Network().Hook().Add(v)
+	v.h.Stream().Register(pathEdgeData, net.HandlerFunc(v.initEdgeData))
+	v.h.Stream().Register(pathEdgeCtrl, net.HandlerFunc(v.initEdgeCtrl))
 
 	return
 }
@@ -63,7 +61,7 @@ func New(h casm.Host, opt ...Option) (Vertex, error) {
 }
 
 // Addr returns the Vertex's network address
-func (v vertex) Addr() casm.Addr { return v.h.Addr() }
+func (v vertex) Addr() net.Addr { return v.h.Addr() }
 
 // Context to which the Vertex's underlying host is bound
 func (v vertex) Context() context.Context { return v.h.Context() }
@@ -100,27 +98,27 @@ func (v vertex) Evict(id casm.IDer) {
 	}
 }
 
-func (v vertex) initEdgeData(s casm.Stream) {
+func (v vertex) initEdgeData(s net.Stream) {
 	c, cancel := context.WithTimeout(s.Context(), time.Second*10)
 	defer cancel()
-	defer v.en.Clear(s.RemotePeer())
+	defer v.en.Clear(s.Endpoint().Remote())
 
 	select {
 	case <-s.Context().Done():
 	case <-c.Done():
-	case v.en.ProvideDataStream(s.RemotePeer()) <- s:
+	case v.en.ProvideDataStream(s.Endpoint().Remote()) <- s:
 	}
 }
 
-func (v vertex) initEdgeCtrl(s casm.Stream) {
+func (v vertex) initEdgeCtrl(s net.Stream) {
 	c, cancel := context.WithTimeout(s.Context(), time.Second*10)
 	defer cancel()
-	defer v.en.Clear(s.RemotePeer())
+	defer v.en.Clear(s.Endpoint().Remote())
 
 	select {
 	case <-s.Context().Done():
 	case <-c.Done():
-	case ds, ok := <-v.en.WaitDataStream(s.RemotePeer()):
+	case ds, ok := <-v.en.WaitDataStream(s.Endpoint().Remote()):
 		if !ok {
 			s.Close()
 			return
@@ -129,35 +127,3 @@ func (v vertex) initEdgeCtrl(s casm.Stream) {
 		v.b.AddEdge(newEdge(newStreamGroup(ds, s)))
 	}
 }
-
-/* Implement NetHook */
-
-// Listen is called when the host begins listening on an addr
-func (v vertex) Listen(net.Network, ma.Multiaddr) {
-	// incr a counter atomically
-	// if the counter was incred FROM 0, start the vertex's state-maintenance logic
-}
-
-// ListenClose is called when the host stops listening on an addr
-func (v vertex) ListenClose(net.Network, ma.Multiaddr) {
-	// decr a counter atomically
-	// if the counter is 0, stop the vertex's state-maintenance logic & clean-up
-}
-
-// Connected is called when a connection is opened
-func (v vertex) Connected(net.Network, net.Conn) {
-	// incr a counter that tracks current cardinality
-	// trigger notifications of state-change, where necessary
-}
-
-// Disconnected is called when a connection is closed
-func (v vertex) Disconnected(net.Network, net.Conn) {
-	// decr a counter that tracks current cardinality
-	// trigger notifications of state-change, where necessary
-}
-
-// OpenedStream is called when a stream is opened
-func (v vertex) OpenedStream(net.Network, net.Stream) {}
-
-// ClosedStream is called when a stream is closed
-func (v vertex) ClosedStream(net.Network, net.Stream) {}

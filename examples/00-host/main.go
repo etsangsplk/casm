@@ -6,20 +6,21 @@ import (
 	"time"
 
 	casm "github.com/lthibault/casm/pkg"
+	"github.com/lthibault/casm/pkg/net"
 )
 
 func main() {
-	h0, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/127.0.0.1/tcp/9021"))
+	h0, err := casm.New(context.Background(), casm.OptListenAddr("localhost:9021"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	h1, err := casm.New(context.Background(), casm.OptListenAddrStrings("/ip4/127.0.0.1/tcp/9022"))
+	h1, err := casm.New(context.Background(), casm.OptListenAddr("localhost:9022"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	h0.Stream().Register("/echo", casm.HandlerFunc(func(s casm.Stream) {
+	h0.Stream().Register("/echo", net.HandlerFunc(func(s net.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
 		b := make([]byte, 11)

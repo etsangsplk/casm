@@ -3,12 +3,11 @@ package graph
 import (
 	"context"
 	"io"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/SentimensRG/ctx/mergectx"
-	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -16,8 +15,8 @@ import (
 // same root context and will all close if any one of them closes.
 type streamGroup interface {
 	Context() context.Context
-	DataStream() casm.Stream
-	CtrlStream() casm.Stream
+	DataStream() net.Stream
+	CtrlStream() net.Stream
 	io.Closer
 }
 
@@ -52,33 +51,23 @@ func (mc multiCloser) Close() error {
 
 type syncStream struct {
 	sync.RWMutex
-	casm.Stream
+	net.Stream
 	c      context.Context
 	cancel func()
-}
-
-func (s *syncStream) maybeTemporary(err error) {
-	if err, ok := err.(net.Error); ok && !err.Temporary() {
-		s.cancel()
-	}
 }
 
 func (s *syncStream) Context() context.Context { return s.c }
 
 func (s *syncStream) Read(b []byte) (n int, err error) {
 	s.RLock()
-	if n, err = s.Stream.Read(b); err != nil {
-		s.maybeTemporary(err)
-	}
+	n, err = s.Stream.Read(b)
 	s.RUnlock()
 	return
 }
 
 func (s *syncStream) Write(b []byte) (n int, err error) {
 	s.RLock()
-	if n, err = s.Stream.Write(b); err != nil {
-		s.maybeTemporary(err)
-	}
+	n, err = s.Stream.Write(b)
 	s.RUnlock()
 	return
 }
@@ -93,38 +82,32 @@ func (s *syncStream) Close() (err error) {
 
 func (s *syncStream) SetDeadline(t time.Time) (err error) {
 	s.RLock()
-	if err = s.Stream.SetDeadline(t); err != nil {
-		s.maybeTemporary(err)
-	}
+	err = s.Stream.SetDeadline(t)
 	s.RUnlock()
 	return
 }
 
 func (s *syncStream) SetReadDeadline(t time.Time) (err error) {
 	s.RLock()
-	if err = s.Stream.SetReadDeadline(t); err != nil {
-		s.maybeTemporary(err)
-	}
+	err = s.Stream.SetReadDeadline(t)
 	s.RUnlock()
 	return
 }
 
 func (s *syncStream) SetWriteDeadline(t time.Time) (err error) {
 	s.RLock()
-	if err = s.Stream.SetWriteDeadline(t); err != nil {
-		s.maybeTemporary(err)
-	}
+	err = s.Stream.SetWriteDeadline(t)
 	s.RUnlock()
 	return
 }
 
 type streamGrp struct {
 	c          context.Context
-	data, ctrl casm.Stream
+	data, ctrl net.Stream
 	io.Closer
 }
 
-func newStreamGroup(data, ctrl casm.Stream) *streamGrp {
+func newStreamGroup(data, ctrl net.Stream) *streamGrp {
 	c := mergectx.Link(data.Context(), ctrl.Context())
 	c, cancel := context.WithCancel(c)
 
@@ -140,5 +123,5 @@ func newStreamGroup(data, ctrl casm.Stream) *streamGrp {
 }
 
 func (g streamGrp) Context() context.Context { return g.c }
-func (g streamGrp) DataStream() casm.Stream  { return g.data }
-func (g streamGrp) CtrlStream() casm.Stream  { return g.ctrl }
+func (g streamGrp) DataStream() net.Stream   { return g.data }
+func (g streamGrp) CtrlStream() net.Stream   { return g.ctrl }

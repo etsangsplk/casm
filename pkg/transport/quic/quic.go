@@ -86,10 +86,24 @@ func (conn conn) Accept() (net.Stream, error) { return conn.Accept() }
 func (conn conn) Open() (net.Stream, error) {
 	s, err := conn.OpenStream()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "open stream")
 	}
 
-	return &stream{Stream: s, EndpointPair: conn}, nil
+	var size uint16
+	if err = binary.Read(s, binary.BigEndian, &size); err != nil {
+		return nil, errors.Wrap(err, "read pathsize")
+	}
+
+	path, err := ioutil.ReadAll(io.LimitReader(s, int64(size)))
+	if err != nil {
+		return nil, errors.Wrap(err, "read path")
+	}
+
+	return &stream{
+		path:         string(path),
+		Stream:       s,
+		EndpointPair: conn,
+	}, nil
 }
 
 func (conn *conn) Endpoint() net.EndpointPair { return conn }
@@ -107,10 +121,12 @@ func (conn conn) CloseWithError(c net.ErrorCode, err error) error {
 }
 
 type stream struct {
+	path string
 	quic.Stream
 	net.EndpointPair
 }
 
+func (s stream) Path() string               { return s.path }
 func (s stream) Endpoint() net.EndpointPair { return s.EndpointPair }
 
 // Transport over QUIC

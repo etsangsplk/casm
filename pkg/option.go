@@ -10,7 +10,7 @@ type Option func(*basicHost) Option
 // OptListenAddr sets the listen address
 func OptListenAddr(addr string) Option {
 	return func(h *basicHost) (prev Option) {
-		h.addr.addr = addr
+		h.addr = addr
 		return
 	}
 }
@@ -26,7 +26,7 @@ func OptTransport(t Transport) Option {
 func optSetID() Option {
 	return func(h *basicHost) (prev Option) {
 		prev = optSetID()
-		h.addr.IDer = NewID()
+		h.id = NewID()
 		return
 	}
 }
@@ -44,7 +44,7 @@ func maybeMkQUIC() Option {
 			tc := generateTLSConfig()
 			qc := defaultQUIC()
 
-			h.t = quic.NewTransport(quic.OptQuic(qc), quic.OptTLS(tc))
+			h.t = quic.NewTransport(h.id, quic.OptQuic(qc), quic.OptTLS(tc))
 		}
 		return
 	}

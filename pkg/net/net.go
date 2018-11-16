@@ -2,6 +2,7 @@ package net
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"time"
@@ -9,6 +10,19 @@ import (
 
 // ErrorCode is used to terminate a connection and signal an error
 type ErrorCode uint16
+
+// Handler responds to an incoming stream connection
+type Handler interface {
+	ServeStream(Stream)
+}
+
+// HandlerFunc is an adapter to allow the use of ordinary functions as stream
+// handlers.  If f is a function with the appropriate signature, HandlerFunc(f)
+// is a Handler that calls f.
+type HandlerFunc func(Stream)
+
+// ServeStream satisfies Handler.  It calls h.
+func (h HandlerFunc) ServeStream(s Stream) { h(s) }
 
 // Listener can listen for incoming connections
 type Listener interface {
@@ -42,6 +56,7 @@ type EndpointPair interface {
 
 // Stream is a bidirectional connection between two hosts
 type Stream interface {
+	Path() string
 	Context() context.Context
 	Endpoint() EndpointPair
 	io.Closer
@@ -59,6 +74,8 @@ type IDer interface {
 
 // PeerID is a unique identifier for a Node
 type PeerID uint64
+
+func (id PeerID) String() string { return fmt.Sprintf("%016x", uint64(id)) }
 
 // ID satisfies the IDer interface
 func (id PeerID) ID() PeerID { return id }

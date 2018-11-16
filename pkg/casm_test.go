@@ -16,12 +16,6 @@ func TestPeerID(t *testing.T) {
 		assert.NotEqual(t, pid, NewID())
 		assert.Equal(t, pid, pid.ID())
 	})
-
-	t.Run("LoadHex", func(t *testing.T) {
-		pidPrime, err := IDFromHex(pid.String())
-		assert.NoError(t, err)
-		assert.Equal(t, pid, pidPrime)
-	})
 }
 
 func TestHost(t *testing.T) {

@@ -7,16 +7,18 @@ import (
 	"time"
 
 	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 	"github.com/stretchr/testify/assert"
 )
 
-var _ casm.Stream = &mockStream{} // type-constraint
+var _ net.Stream = &mockStream{} // type-constraint
 
 type mockStream struct {
 	c      context.Context
 	cancel func()
 	io.ReadWriter
 	rpid casm.IDer
+	net.EndpointPair
 }
 
 func newStream(rw io.ReadWriter) *mockStream {
@@ -29,13 +31,14 @@ func newStream(rw io.ReadWriter) *mockStream {
 	}
 }
 
-func (m mockStream) Context() context.Context { return m.c }
-func (m mockStream) CloseWrite() error        { return nil }
+func (mockStream) Path() string                 { return "" }
+func (m mockStream) Context() context.Context   { return m.c }
+func (m mockStream) Endpoint() net.EndpointPair { return m.EndpointPair }
+func (mockStream) CloseWrite() error            { return nil }
 func (m mockStream) Close() error {
 	m.cancel()
 	return nil
 }
-func (m mockStream) RemotePeer() casm.PeerID          { return m.rpid.ID() }
 func (m mockStream) SetDeadline(time.Time) error      { return nil }
 func (m mockStream) SetReadDeadline(time.Time) error  { return nil }
 func (m mockStream) SetWriteDeadline(time.Time) error { return nil }

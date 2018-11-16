@@ -6,7 +6,7 @@ Hosts are the lowest-level abstraction in CASM, and are represented by the `casm
 correspond to a physical machine.
 
 Hosts are responsible for establishing network connections between each other,
-and for multiplexing `casm.Stream`s on top of these connections.
+and for multiplexing `net.Stream`s on top of these connections.
 
 ## Demonstration
 
