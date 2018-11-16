@@ -151,7 +151,7 @@ func (t *Transport) Dial(c context.Context, a net.Addr) (conn net.Conn, err erro
 // Listen on the specified address
 func (t *Transport) Listen(c context.Context, a net.Addr) (net.Listener, error) {
 	l, err := quic.ListenAddr(a.String(), t.t, t.q)
-	if l != nil {
+	if err != nil {
 		return nil, err
 	}
 	ctx.Defer(c, func() { l.Close() })

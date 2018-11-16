@@ -9,14 +9,20 @@ import (
 	"github.com/lthibault/casm/pkg/net"
 )
 
+var c = context.Background()
+
 func main() {
-	h0, err := host.New(context.Background(), host.OptListenAddr("localhost:9021"))
+	h0, err := host.New(host.OptListenAddr("localhost:9021"))
 	if err != nil {
+		log.Fatal(err)
+	} else if err = h0.ListenAndServe(c); err != nil {
 		log.Fatal(err)
 	}
 
-	h1, err := host.New(context.Background(), host.OptListenAddr("localhost:9022"))
+	h1, err := host.New(host.OptListenAddr("localhost:9022"))
 	if err != nil {
+		log.Fatal(err)
+	} else if err = h1.ListenAndServe(c); err != nil {
 		log.Fatal(err)
 	}
 

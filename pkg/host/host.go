@@ -6,6 +6,8 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/SentimensRG/ctx"
+
 	radix "github.com/armon/go-radix"
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
@@ -32,6 +34,7 @@ type Host interface {
 	Addr() net.Addr
 	Network() Network
 	Stream() StreamManager
+	ListenAndServe(c context.Context) error
 }
 
 type basicHost struct {
@@ -51,7 +54,7 @@ func mkHost() *basicHost {
 }
 
 // New Host whose lifetime is bound to the context c.
-func New(c context.Context, opt ...Option) (Host, error) {
+func New(opt ...Option) (Host, error) {
 	var err error
 	h := mkHost()
 	for _, fn := range defaultOpts(opt...) {
@@ -61,14 +64,52 @@ func New(c context.Context, opt ...Option) (Host, error) {
 	return h, err
 }
 
-// Addr on which to reach the Host
 func (bh basicHost) Addr() net.Addr { return net.NewAddr(bh.id, bh.addr) }
 
-// Context to which the Host is bound
-func (bh basicHost) Context() context.Context { return bh.c }
+func (bh basicHost) Network() Network {
+	if bh.c == nil {
+		panic(errors.New("host not started"))
+	}
+	return bh
+}
 
-func (bh basicHost) Network() Network      { return bh }
-func (bh basicHost) Stream() StreamManager { return bh }
+func (bh basicHost) Stream() StreamManager {
+	if bh.c == nil {
+		panic(errors.New("host not started"))
+	}
+	return bh
+}
+
+func (bh basicHost) Context() context.Context {
+	if bh.c == nil {
+		panic(errors.New("host not started"))
+	}
+	return bh.c
+}
+
+func (bh basicHost) ListenAndServe(c context.Context) error {
+	bh.c = c
+
+	l, err := bh.t.Listen(c, bh.Addr())
+	if err != nil {
+		return errors.Wrap(err, "listen")
+	}
+	ctx.Defer(c, func() { l.Close() })
+
+	go func() {
+		for range ctx.Tick(c) {
+			if conn, err := l.Accept(c); err != nil {
+				// TODO:  this should be logged
+				panic(err)
+			} else if err = bh.peers.Add(conn); err != nil {
+				// TODO:  this should be logged too
+				panic(err)
+			}
+		}
+	}()
+
+	return nil
+}
 
 /*
 	implment StreamManager

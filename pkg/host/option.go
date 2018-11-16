@@ -64,5 +64,6 @@ func defaultOpts(overrides ...Option) []Option {
 		OptListenAddr("localhost:1987"),
 	}
 
-	return append(opt, maybeMkQUIC())
+	overrides = append(overrides, maybeMkQUIC())
+	return append(opt, overrides...)
 }
