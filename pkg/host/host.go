@@ -87,7 +87,7 @@ func (bh basicHost) Context() context.Context {
 	return bh.c
 }
 
-func (bh basicHost) ListenAndServe(c context.Context) error {
+func (bh *basicHost) ListenAndServe(c context.Context) error {
 	bh.c = c
 
 	l, err := bh.t.Listen(c, bh.Addr())
