@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/libp2p/go-libp2p/config"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -39,25 +37,8 @@ func TestHost(t *testing.T) {
 			assert.Equal(t, c, h.Context())
 		})
 
-		t.Run("Fail", func(t *testing.T) {
-
-			t.Run("libp2pOpt", func(t *testing.T) {
-				errOpt := p2pOpt(func(*config.Config) error {
-					return errors.New("TESTING ERROR")
-				})
-				_, err := New(context.Background(), errOpt)
-				assert.Error(t, err)
-				assert.NotNil(t, errors.Cause(err))
-			})
-
-			t.Run("CASMOpt", func(t *testing.T) {
-				errOpt := hostOpt(func(*basicHost) error {
-					return errors.New("TESTING ERROR")
-				})
-				_, err := New(context.Background(), errOpt)
-				assert.Error(t, err)
-			})
-		})
+		// t.Run("Fail", func(t *testing.T) {
+		// })
 	})
 
 }

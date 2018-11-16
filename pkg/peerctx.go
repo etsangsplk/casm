@@ -11,13 +11,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-const (
-	keyID  ctxKey = iota
-	keyHID ctxKey = iota
-)
-
-type ctxKey uint8
-
 func getID(c context.Context) PeerID   { return c.Value(keyID).(PeerID) }
 func getHID(c context.Context) peer.ID { return c.Value(keyHID).(peer.ID) }
 

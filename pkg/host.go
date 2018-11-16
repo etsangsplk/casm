@@ -24,10 +24,8 @@ func mkHost() *basicHost {
 func New(c context.Context, opt ...Option) (Host, error) {
 	var err error
 	h := mkHost()
-	for _, fn := range append(defaultOpts(), opt...) {
-		if err = fn(h); err != nil {
-			break
-		}
+	for _, fn := range defaultOpts(opt...) {
+		fn(h)
 	}
 
 	return h, err
