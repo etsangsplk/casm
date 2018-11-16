@@ -8,8 +8,8 @@ import (
 	"io/ioutil"
 
 	"github.com/SentimensRG/ctx"
-	"github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
+	log "github.com/lthibault/log/pkg"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 )
@@ -105,6 +105,8 @@ func (t *Transport) Dial(c context.Context, a net.Addr) (net.Conn, error) {
 
 // Listen on the specified address
 func (t *Transport) Listen(c context.Context, a net.Addr) (net.Listener, error) {
+	log.Get(c).Debug("listening")
+
 	l, err := quic.ListenAddr(a.String(), t.t, t.q)
 	if err != nil {
 		return nil, err

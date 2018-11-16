@@ -3,9 +3,9 @@ package host
 import (
 	"crypto/tls"
 
-	log "github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
 	quic "github.com/lthibault/casm/pkg/transport/quic"
+	log "github.com/lthibault/log/pkg"
 	"github.com/pkg/errors"
 )
 
@@ -107,7 +107,7 @@ func maybeMkQUIC() Option {
 
 func defaultOpts(overrides ...Option) []Option {
 	opt := []Option{
-		OptLogger(log.NoOp()),
+		OptLogger(log.New()),
 		optSetID(),
 		OptListenAddr("localhost:1987"),
 	}

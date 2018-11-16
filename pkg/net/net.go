@@ -8,7 +8,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/lthibault/casm/pkg/log"
+	log "github.com/lthibault/log/pkg"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

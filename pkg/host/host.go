@@ -11,8 +11,8 @@ import (
 
 	radix "github.com/armon/go-radix"
 	casm "github.com/lthibault/casm/pkg"
-	log "github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
+	log "github.com/lthibault/log/pkg"
 	"github.com/pkg/errors"
 )
 
@@ -68,12 +68,7 @@ func (bh basicHost) Network() Network {
 	return bh
 }
 
-func (bh basicHost) Stream() StreamManager {
-	if bh.c == nil {
-		panic(errors.New("host not started"))
-	}
-	return bh
-}
+func (bh basicHost) Stream() StreamManager { return bh }
 
 func (bh basicHost) Context() context.Context {
 	if bh.c == nil {
@@ -88,29 +83,59 @@ func (bh *basicHost) ListenAndServe(c context.Context) error {
 		"local_peer": bh.Addr(),
 	})
 	bh.log.Info("starting host")
-	bh.c = c
+	bh.c = log.Set(c, bh.log)
+	c = log.Set(c, bh.log.WithLocus("transport"))
 
-	l, err := bh.t.Listen(bh.c, bh.Addr())
+	l, err := bh.t.Listen(c, bh.Addr())
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-	ctx.Defer(bh.c, func() { l.Close() })
 
-	go func() {
-		for range ctx.Tick(bh.c) {
-			if conn, err := l.Accept(bh.c); err != nil {
-				bh.log.WithError(err).Warn("accept conn")
-			} else if err = bh.peers.Add(conn); err != nil {
-				bh.log.WithError(err).Warn("store peer")
-			} else {
-				ctx.Defer(conn.Context(), func() {
-					bh.Disconnect(conn.Endpoint().Remote())
-				})
-			}
-		}
-	}()
+	ctx.Defer(bh.c, func() { l.Close() })
+	go bh.startAccepting(l)
 
 	return nil
+}
+
+func (bh basicHost) startAccepting(l net.Listener) {
+	bh.log.Debug("accepting connections")
+	listenLog := bh.log.WithLocus("listener")
+	listenCtx := log.Set(bh.c, listenLog)
+
+	var err error
+	var conn net.Conn
+
+	for range ctx.Tick(bh.c) {
+		if conn, err = l.Accept(listenCtx); err != nil {
+			bh.log.WithError(err).Warn("accept conn")
+			return
+		}
+
+		if !bh.peers.Add(conn) {
+			bh.log.Error("peer already connected")
+			return
+		}
+
+		bh.log.Debug("handling connection") // TODO:  add fields identifying the conn
+		go bh.handle(conn)
+	}
+}
+
+func (bh basicHost) handle(conn net.Conn) {
+	defer bh.Disconnect(conn.Endpoint().Remote())
+
+	bh.log.Debug("accepting streams")
+
+	var err error
+	var s net.Stream
+	for range ctx.Tick(ctx.Link(bh.c, conn.Context())) {
+		if s, err = conn.Stream().Accept(); err != nil {
+			bh.log.WithError(err).Warn("accept stream")
+			return
+		}
+
+		go bh.mux.Serve(s)
+	}
 }
 
 /*
@@ -130,9 +155,9 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 		"path":        path,
 	})
 
-	conn, err := bh.peers.Get(a.Addr())
-	if err != nil {
-		return nil, errors.Wrap(err, "get peer")
+	conn, ok := bh.peers.Get(a.Addr())
+	if !ok {
+		return nil, errors.Wrap(err, "peer not connected")
 	}
 
 	cherr0 := make(chan error)
@@ -206,13 +231,19 @@ func (bh basicHost) Connect(c context.Context, a casm.Addresser) (err error) {
 		l.Debug("connected")
 	}).Eval(err)
 
-	c = log.Set(c, l.WithLocus("transport"))
-	conn, err := bh.t.Dial(c, a.Addr())
-	if err != nil {
-		bh.log.WithField("addr", a.Addr()).WithError(err).Debug("connect")
-		err = errors.Wrap(err, "transport")
-	} else {
-		err = errors.Wrap(bh.peers.Add(conn), "add peer")
+	conn, ok := bh.peers.Get(a.Addr())
+	if !ok {
+		c = log.Set(c, l.WithLocus("transport"))
+
+		if conn, err = bh.t.Dial(c, a.Addr()); err != nil {
+			bh.log.WithField("addr", a.Addr()).WithError(err).Debug("connect")
+			err = errors.Wrap(err, "transport")
+			return
+		}
+	}
+
+	if ok || !bh.peers.Add(conn) {
+		err = errors.New("peer already connected")
 	}
 
 	return
@@ -230,25 +261,22 @@ type peerStore struct {
 	m map[net.PeerID]net.Conn
 }
 
-func (p *peerStore) Add(conn net.Conn) error {
+func (p *peerStore) Add(conn net.Conn) bool {
 	p.Lock()
 	defer p.Unlock()
 
 	id := conn.Endpoint().Remote().ID()
 	if _, ok := p.m[id]; ok {
-		return errors.New("peer already connected")
+		return false
 	}
 	p.m[id] = conn
-	return nil
+	return true
 }
 
-func (p *peerStore) Get(id casm.IDer) (c net.Conn, err error) {
+func (p *peerStore) Get(id casm.IDer) (c net.Conn, ok bool) {
 	p.RLock()
-	defer p.RUnlock()
-	var ok bool
-	if c, ok = p.m[id.ID()]; !ok {
-		err = errors.New("not found")
-	}
+	c, ok = p.m[id.ID()]
+	p.RUnlock()
 	return
 }
 
@@ -291,7 +319,7 @@ type bind struct {
 func (b bind) Serve(s net.Stream) {
 	c := mergectx.Link(b.c, s.Context())
 	c = log.Set(c, log.Get(c).WithLocus("handler"))
-	go b.h.Serve(net.Bind(c, s))
+	b.h.Serve(net.Bind(c, s))
 }
 
 type mux struct {
@@ -305,7 +333,7 @@ func newMux() *mux {
 
 func (m *mux) Register(c context.Context, path string, h net.Handler) {
 	m.lock.Lock()
-	log.Get(c).WithFields(log.F{"path": path, "handler": h}).Debug("registered")
+	log.Get(c).WithField("path", path).Debug("registered")
 	m.Insert(path, bind{c: c, h: h})
 	m.lock.Unlock()
 }
@@ -320,6 +348,6 @@ func (m *mux) Unregister(path string) {
 
 func (m *mux) Serve(s net.Stream) {
 	m.lock.RLock()
-	m.Serve(s)
+	m.radixRouter.Serve(s)
 	m.lock.RUnlock()
 }

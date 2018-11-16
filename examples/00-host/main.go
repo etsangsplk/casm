@@ -2,36 +2,21 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/lthibault/casm/pkg/host"
-	clog "github.com/lthibault/casm/pkg/log"
 	"github.com/lthibault/casm/pkg/net"
-	log "github.com/sirupsen/logrus"
+	log "github.com/lthibault/log/pkg"
 )
 
 var c = context.Background()
 var timeout = time.Second * 60
 
-var l clog.Logger
-
-func init() {
-	lgrs := log.New()
-	lgrs.SetLevel(log.DebugLevel)
-	l = clog.WrapLogrus(lgrs)
-}
-
 func main() {
-	h0 := host.New(host.OptLogger(l), host.OptListenAddr("localhost:9021"))
-	if err := h0.ListenAndServe(c); err != nil {
-		log.Fatal(err)
-	}
+	log := log.New(log.OptLevel(log.DebugLevel))
 
-	h1 := host.New(host.OptListenAddr("localhost:9022"))
-	if err := h1.ListenAndServe(c); err != nil {
-		log.Fatal(err)
-	}
-
+	h0 := host.New(host.OptLogger(log), host.OptListenAddr("localhost:9021"))
 	h0.Stream().Register("/echo", net.HandlerFunc(func(s net.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
@@ -52,6 +37,16 @@ func main() {
 			}
 		}
 	}))
+
+	h1 := host.New(host.OptLogger(log), host.OptListenAddr("localhost:9022"))
+
+	if err := h0.ListenAndServe(c); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := h1.ListenAndServe(c); err != nil {
+		log.Fatal(err)
+	}
 
 	connCtx, cancel := context.WithTimeout(c, timeout)
 	defer cancel()
@@ -81,5 +76,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Fatal(string(b))
+	fmt.Println(string(b))
 }
