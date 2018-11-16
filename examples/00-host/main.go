@@ -6,23 +6,29 @@ import (
 	"time"
 
 	"github.com/lthibault/casm/pkg/host"
+	clog "github.com/lthibault/casm/pkg/log"
 	"github.com/lthibault/casm/pkg/net"
+	"github.com/sirupsen/logrus"
 )
 
 var c = context.Background()
 
+var l clog.Logger
+
+func init() {
+	lgrs := logrus.New()
+	lgrs.SetLevel(logrus.DebugLevel)
+	l = clog.WrapLogrus(lgrs)
+}
+
 func main() {
-	h0, err := host.New(host.OptListenAddr("localhost:9021"))
-	if err != nil {
-		log.Fatal(err)
-	} else if err = h0.ListenAndServe(c); err != nil {
+	h0 := host.New(host.OptLogger(l), host.OptListenAddr("localhost:9021"))
+	if err := h0.ListenAndServe(c); err != nil {
 		log.Fatal(err)
 	}
 
-	h1, err := host.New(host.OptListenAddr("localhost:9022"))
-	if err != nil {
-		log.Fatal(err)
-	} else if err = h1.ListenAndServe(c); err != nil {
+	h1 := host.New(host.OptListenAddr("localhost:9022"))
+	if err := h1.ListenAndServe(c); err != nil {
 		log.Fatal(err)
 	}
 
@@ -53,7 +59,7 @@ func main() {
 
 	log.Println("connecting")
 	// Connect the hosts to each other
-	if err = h0.Network().Connect(connCtx, h1); err != nil {
+	if err := h0.Network().Connect(connCtx, h1); err != nil {
 		log.Fatal(err)
 	}
 

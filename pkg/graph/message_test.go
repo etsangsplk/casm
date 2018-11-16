@@ -8,7 +8,7 @@ import (
 )
 
 func TestMessage(t *testing.T) {
-	id := casm.NewID()
+	id := net.New()()
 
 	t.Run("Factory", func(t *testing.T) {
 		f := newMsgFactory(id)

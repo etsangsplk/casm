@@ -10,6 +10,7 @@ import (
 
 	radix "github.com/armon/go-radix"
 	casm "github.com/lthibault/casm/pkg"
+	log "github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
 	"github.com/pkg/errors"
 )
@@ -38,7 +39,7 @@ type Host interface {
 }
 
 type basicHost struct {
-	log  casm.Logger
+	l    log.Logger
 	c    context.Context
 	id   casm.IDer
 	addr string
@@ -47,25 +48,18 @@ type basicHost struct {
 	t     net.Transport
 }
 
-func mkHost() *basicHost {
-	return &basicHost{
-		mux:   &mux{radixRouter: (*radixRouter)(radix.New())},
-		peers: &peerStore{m: make(map[net.PeerID]net.Conn)},
-	}
-}
-
 // New Host whose lifetime is bound to the context c.
-func New(opt ...Option) (Host, error) {
-	var err error
-	h := mkHost()
+func New(opt ...Option) Host {
+	cfg := new(cfg)
 	for _, fn := range defaultOpts(opt...) {
-		fn(h)
+		fn(cfg)
 	}
 
-	return h, err
+	return cfg.mkHost()
 }
 
-func (bh basicHost) Addr() net.Addr { return net.NewAddr(bh.id, bh.addr) }
+func (bh basicHost) log() log.Logger { return bh.l }
+func (bh basicHost) Addr() net.Addr  { return net.NewAddr(bh.id.ID(), bh.addr) }
 
 func (bh basicHost) Network() Network {
 	if bh.c == nil {
@@ -100,11 +94,9 @@ func (bh *basicHost) ListenAndServe(c context.Context) error {
 	go func() {
 		for range ctx.Tick(c) {
 			if conn, err := l.Accept(c); err != nil {
-				// TODO:  this should be logged
-				panic(err)
+				bh.log().WithError(err).Warn("accept conn")
 			} else if err = bh.peers.Add(conn); err != nil {
-				// TODO:  this should be logged too
-				panic(err)
+				bh.log().WithError(err).Warn("store peer")
 			} else {
 				ctx.Defer(conn.Context(), func() {
 					bh.Disconnect(conn.Endpoint().Remote())
@@ -132,6 +124,7 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 	go func() {
 		var e error
 		if s, e = conn.Stream().Open(); e != nil {
+			bh.log().WithError(e).Warn("open stream")
 			e = errors.Wrap(e, "open stream")
 		}
 
@@ -153,6 +146,7 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 			case <-c.Done():
 			case cherr1 <- errors.Wrap(e, "write path"):
 				if e != nil {
+					bh.log().WithError(e).Warn("write path")
 					s.Close() // TODO:  CloseWithError
 				}
 			}
@@ -175,13 +169,14 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 	conn, err := bh.t.Dial(c, a.Addr())
 	if err != nil {
-		return errors.Wrap(err, "dial")
+		bh.log().WithField("addr", a.Addr()).WithError(err).Debug("connect")
+		return errors.Wrap(err, "transport")
 	}
 
 	return errors.Wrap(bh.peers.Add(conn), "add peer")
 }
 
-func (bh basicHost) Disconnect(id net.IDer) {
+func (bh basicHost) Disconnect(id casm.IDer) {
 	if conn, ok := bh.peers.Del(id.ID()); ok {
 		// TODO: log error
 		conn.Close()
@@ -190,7 +185,7 @@ func (bh basicHost) Disconnect(id net.IDer) {
 
 type peerStore struct {
 	sync.RWMutex
-	m map[casm.PeerID]net.Conn
+	m map[net.PeerID]net.Conn
 }
 
 func (p *peerStore) Add(conn net.Conn) error {
@@ -199,13 +194,13 @@ func (p *peerStore) Add(conn net.Conn) error {
 
 	id := conn.Endpoint().Remote().ID()
 	if _, ok := p.m[id]; ok {
-		return errors.New("already connected")
+		return errors.New("peer already connected")
 	}
 	p.m[id] = conn
 	return nil
 }
 
-func (p *peerStore) Get(id net.IDer) (c net.Conn, err error) {
+func (p *peerStore) Get(id casm.IDer) (c net.Conn, err error) {
 	p.RLock()
 	defer p.RUnlock()
 	var ok bool
@@ -215,7 +210,7 @@ func (p *peerStore) Get(id net.IDer) (c net.Conn, err error) {
 	return
 }
 
-func (p *peerStore) Del(id net.IDer) (conn net.Conn, ok bool) {
+func (p *peerStore) Del(id casm.IDer) (conn net.Conn, ok bool) {
 	p.Lock()
 	conn, ok = p.m[id.ID()]
 	delete(p.m, id.ID())

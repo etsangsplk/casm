@@ -27,7 +27,7 @@ func newStream(rw io.ReadWriter) *mockStream {
 		c:          c,
 		cancel:     cancel,
 		ReadWriter: rw,
-		rpid:       casm.NewID(),
+		rpid:       net.New()(),
 	}
 }
 
@@ -45,7 +45,7 @@ func (m mockStream) SetWriteDeadline(time.Time) error { return nil }
 
 func TestEdgeNegotiator(t *testing.T) {
 	t.Run("maybeInitUnsafe", func(t *testing.T) {
-		id := casm.NewID()
+		id := net.New()()
 		en := newEdgeNegotiator()
 		assert.Empty(t, en.m)
 		assert.NotNil(t, en.maybeInitUnsafe(id))
@@ -53,7 +53,7 @@ func TestEdgeNegotiator(t *testing.T) {
 	})
 
 	t.Run("ProvideBeforeWait", func(t *testing.T) {
-		id := casm.NewID()
+		id := net.New()()
 		en := newEdgeNegotiator()
 		assert.NotNil(t, en.ProvideDataStream(id))
 		assert.NotNil(t, en.WaitDataStream(id))
@@ -63,7 +63,7 @@ func TestEdgeNegotiator(t *testing.T) {
 	})
 
 	t.Run("WaitBeforeProvide", func(t *testing.T) {
-		id := casm.NewID()
+		id := net.New()()
 		en := newEdgeNegotiator()
 		assert.NotNil(t, en.ProvideDataStream(id))
 		assert.NotNil(t, en.WaitDataStream(id))
@@ -74,7 +74,7 @@ func TestEdgeNegotiator(t *testing.T) {
 
 	t.Run("Send", func(t *testing.T) {
 		t.Run("ProvideBeforeWait", func(t *testing.T) {
-			id := casm.NewID()
+			id := net.New()()
 			s := &mockStream{}
 			en := newEdgeNegotiator()
 
@@ -83,7 +83,7 @@ func TestEdgeNegotiator(t *testing.T) {
 		})
 
 		t.Run("WaitBeforeProvide", func(t *testing.T) {
-			id := casm.NewID()
+			id := net.New()()
 			s := &mockStream{}
 			en := newEdgeNegotiator()
 

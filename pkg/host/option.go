@@ -1,34 +1,87 @@
 package host
 
 import (
-	casm "github.com/lthibault/casm/pkg"
+	"crypto/tls"
+
+	radix "github.com/armon/go-radix"
+	log "github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
-	"github.com/lthibault/casm/pkg/transport/quic"
+	quic "github.com/lthibault/casm/pkg/transport/quic"
+	"github.com/pkg/errors"
 )
 
+type cfg struct {
+	Addr              string
+	CertPath, KeyPath string
+	Insecure          bool
+
+	id net.PeerID
+	t  net.Transport
+	l  log.Logger
+	qc *quic.Config
+	tc *tls.Config
+}
+
+func (c *cfg) mkHost() *basicHost {
+	if c.t == nil {
+		if c.CertPath == "" && c.KeyPath == "" {
+			if !c.Insecure {
+				panic(errors.New("TLS required"))
+			}
+			c.tc = generateTLSConfig()
+		} else {
+			panic("LoadTLS NOT IMPLEMENTED")
+		}
+
+		if c.qc == nil {
+			c.qc = defaultQUIC()
+		}
+
+		c.t = quic.New(c.id, quic.OptQuic(c.qc), quic.OptTLS(c.tc))
+	}
+
+	return &basicHost{
+		addr:  c.Addr,
+		id:    c.id,
+		t:     c.t,
+		l:     c.l,
+		mux:   &mux{radixRouter: (*radixRouter)(radix.New())},
+		peers: &peerStore{m: make(map[net.PeerID]net.Conn)},
+	}
+}
+
 // Option represents a setting
-type Option func(*basicHost) Option
+type Option func(*cfg) Option
 
 // OptListenAddr sets the listen address
 func OptListenAddr(addr string) Option {
-	return func(h *basicHost) (prev Option) {
-		h.addr = addr
+	return func(c *cfg) (prev Option) {
+		c.Addr = addr
 		return
 	}
 }
 
 // OptTransport sets the transport
 func OptTransport(t net.Transport) Option {
-	return func(h *basicHost) (prev Option) {
-		h.t = t
+	return func(c *cfg) (prev Option) {
+		c.t = t
+		return
+	}
+}
+
+// OptLogger sets the logger
+func OptLogger(log log.Logger) Option {
+	return func(c *cfg) (prev Option) {
+		prev = OptLogger(c.l)
+		c.l = log.WithField("locus", "host")
 		return
 	}
 }
 
 func optSetID() Option {
-	return func(h *basicHost) (prev Option) {
+	return func(c *cfg) (prev Option) {
 		prev = optSetID()
-		h.id = casm.NewID()
+		c.id = net.New()
 		return
 	}
 }
@@ -40,13 +93,13 @@ func defaultQUIC() *quic.Config {
 }
 
 func maybeMkQUIC() Option {
-	return func(h *basicHost) (prev Option) {
-		prev = OptTransport(h.t)
-		if h.t == nil {
+	return func(c *cfg) (prev Option) {
+		prev = OptTransport(c.t)
+		if c.t == nil {
 			tc := generateTLSConfig()
 			qc := defaultQUIC()
 
-			h.t = quic.New(h.id, quic.OptQuic(qc), quic.OptTLS(tc))
+			c.t = quic.New(c.id, quic.OptQuic(qc), quic.OptTLS(tc))
 		}
 		return
 	}
@@ -54,6 +107,7 @@ func maybeMkQUIC() Option {
 
 func defaultOpts(overrides ...Option) []Option {
 	opt := []Option{
+		OptLogger(log.NoOp()),
 		optSetID(),
 		OptListenAddr("localhost:1987"),
 	}

@@ -47,12 +47,12 @@ func (conn *conn) Negotiate(c context.Context, id net.PeerID) (*conn, error) {
 
 	g.Go(func() error {
 		ch := make(chan error, 1)
-		defer close(ch)
 
 		go func() {
 			b := new(bytes.Buffer)
 			if _, err = io.Copy(b, io.LimitReader(s, 8)); err != nil {
 				ch <- errors.Wrap(err, "read header")
+				close(ch)
 				return
 			}
 

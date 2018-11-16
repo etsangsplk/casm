@@ -11,9 +11,9 @@ func TestPeerID(t *testing.T) {
 	var pid PeerID
 
 	t.Run("Generate", func(t *testing.T) {
-		pid = NewID()
+		pid = New()()
 		assert.NotZero(t, pid)
-		assert.NotEqual(t, pid, NewID())
+		assert.NotEqual(t, pid, New()())
 		assert.Equal(t, pid, pid.ID())
 	})
 }
