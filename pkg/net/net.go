@@ -2,11 +2,19 @@ package net
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"time"
 )
+
+// NewAddr from an ID and an address stringer
+func NewAddr(id PeerID, a string) Addr {
+	return &addr{PeerID: id, addr: a}
+}
+
+func (a addr) Addr() Addr      { return a }
+func (a addr) Network() string { return "udp" }
+func (a addr) String() string  { return a.addr }
 
 // ErrorCode is used to terminate a connection and signal an error
 type ErrorCode uint16
@@ -74,14 +82,6 @@ type Stream interface {
 	SetWriteDeadline(time.Time) error
 }
 
-// PeerID is a unique identifier for a Node
-type PeerID uint64
-
-func (id PeerID) String() string { return fmt.Sprintf("%016x", uint64(id)) }
-
-// ID satisfies the IDer interface
-func (id PeerID) ID() PeerID { return id }
-
 // Addr of a Host
 type Addr interface {
 	ID() PeerID
@@ -93,12 +93,3 @@ type addr struct {
 	PeerID
 	addr string
 }
-
-// NewAddr from an ID and an address stringer
-func NewAddr(id PeerID, a string) Addr {
-	return &addr{PeerID: id, addr: a}
-}
-
-func (a addr) Addr() Addr      { return a }
-func (a addr) Network() string { return "udp" }
-func (a addr) String() string  { return a.addr }
