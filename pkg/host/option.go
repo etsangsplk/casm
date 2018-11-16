@@ -1,7 +1,15 @@
-package casm
+package host
 
 import (
+	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 	"github.com/lthibault/casm/pkg/transport/quic"
+)
+
+type ctxKey uint16
+
+const (
+	keyListenAddr ctxKey = iota
 )
 
 // Option represents a setting
@@ -16,7 +24,7 @@ func OptListenAddr(addr string) Option {
 }
 
 // OptTransport sets the transport
-func OptTransport(t Transport) Option {
+func OptTransport(t net.Transport) Option {
 	return func(h *basicHost) (prev Option) {
 		h.t = t
 		return
@@ -26,7 +34,7 @@ func OptTransport(t Transport) Option {
 func optSetID() Option {
 	return func(h *basicHost) (prev Option) {
 		prev = optSetID()
-		h.id = NewID()
+		h.id = casm.NewID()
 		return
 	}
 }

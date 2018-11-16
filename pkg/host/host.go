@@ -1,4 +1,4 @@
-package casm
+package host
 
 import (
 	"context"
@@ -7,9 +7,32 @@ import (
 	"unsafe"
 
 	radix "github.com/armon/go-radix"
+	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
 	"github.com/pkg/errors"
 )
+
+// Network manages raw connections
+type Network interface {
+	Connect(context.Context, casm.Addresser) error
+	Disconnect(casm.IDer)
+}
+
+// StreamManager manages streams, which are multiplexed on top of raw connections
+type StreamManager interface {
+	Register(string, net.Handler)
+	Unregister(string)
+	Open(context.Context, casm.Addresser, string) (net.Stream, error)
+}
+
+// Host is a logical machine in a compute cluster.  It acts both as a server and
+// a client.  In the CASM expander-graph model, it is a vertex.
+type Host interface {
+	Context() context.Context
+	Addr() net.Addr
+	Network() Network
+	Stream() StreamManager
+}
 
 type basicHost struct {
 	c    context.Context
@@ -17,7 +40,7 @@ type basicHost struct {
 	addr string
 	*mux
 	peers *peerStore
-	t     Transport
+	t     net.Transport
 }
 
 func mkHost() *basicHost {
@@ -51,7 +74,7 @@ func (bh basicHost) Stream() StreamManager { return bh }
 	implment StreamManager
 */
 
-func (bh basicHost) Open(c context.Context, a Addresser, path string) (s net.Stream, err error) {
+func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s net.Stream, err error) {
 	conn, err := bh.peers.Get(a.Addr())
 	if err != nil {
 		return nil, errors.Wrap(err, "get peer")
@@ -103,7 +126,13 @@ func (bh basicHost) Open(c context.Context, a Addresser, path string) (s net.Str
 	Implement Network
 */
 
-func (bh basicHost) Connect(c context.Context, a Addresser) error {
+func dial(c context.Context, t net.Transport, a net.Addr) (net.Conn, error) {
+	header := make([]byte, 8) // consider sync.Pool
+	binary.BigEndian.PutUint64(header, uint64(a.ID()))
+	return t.Dial(context.WithValue(c, keyListenAddr, a), a)
+}
+
+func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 	conn, err := dial(c, bh.t, a.Addr())
 	if err != nil {
 		return errors.Wrap(err, "dial")
@@ -118,7 +147,7 @@ func (bh basicHost) Disconnect(id net.IDer) {
 
 type peerStore struct {
 	sync.RWMutex
-	m map[PeerID]net.Conn
+	m map[casm.PeerID]net.Conn
 }
 
 func (p *peerStore) Add(conn net.Conn) error {

@@ -24,6 +24,13 @@ type HandlerFunc func(Stream)
 // ServeStream satisfies Handler.  It calls h.
 func (h HandlerFunc) ServeStream(s Stream) { h(s) }
 
+// Transport is a means by which to connect to an listen for connections from
+// other peers.
+type Transport interface {
+	Listen(context.Context, Addr) (Listener, error)
+	Dial(context.Context, Addr) (Conn, error)
+}
+
 // Listener can listen for incoming connections
 type Listener interface {
 	// Close the server

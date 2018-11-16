@@ -5,17 +5,17 @@ import (
 	"log"
 	"time"
 
-	casm "github.com/lthibault/casm/pkg"
+	"github.com/lthibault/casm/pkg/host"
 	"github.com/lthibault/casm/pkg/net"
 )
 
 func main() {
-	h0, err := casm.New(context.Background(), casm.OptListenAddr("localhost:9021"))
+	h0, err := host.New(context.Background(), host.OptListenAddr("localhost:9021"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	h1, err := casm.New(context.Background(), casm.OptListenAddr("localhost:9022"))
+	h1, err := host.New(context.Background(), host.OptListenAddr("localhost:9022"))
 	if err != nil {
 		log.Fatal(err)
 	}
