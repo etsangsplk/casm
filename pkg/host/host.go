@@ -180,8 +180,9 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 
 func (bh basicHost) Connect(c context.Context, a casm.Addresser) (err error) {
 	l := bh.log.WithField("remote_peer", a.Addr())
+	l.Debug("connecting")
 	defer l.IfNoErr(func(l log.Logger) {
-		l.Debug("connecting")
+		l.Debug("connected")
 	}).Eval(err)
 
 	c = log.Set(c, l.WithLocus("transport"))

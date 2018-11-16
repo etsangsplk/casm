@@ -37,6 +37,7 @@ type Logger interface {
 	WithField(string, interface{}) Logger
 	WithFields(F) Logger
 
+	State(func(Logger)) State
 	IfErr(func(Logger)) ErrState
 	IfNoErr(func(Logger)) ErrState
 }
@@ -50,6 +51,15 @@ func Get(c context.Context) Logger {
 func Set(c context.Context, l Logger) context.Context {
 	return context.WithValue(c, keyLogger, l)
 }
+
+// State is a deferrable function
+type State interface {
+	Eval()
+}
+
+type state func()
+
+func (f state) Eval() { f() }
 
 // ErrState is a deferrable error check
 type ErrState interface {
@@ -118,6 +128,10 @@ func (l fieldLogger) WithField(k string, v interface{}) Logger {
 }
 func (l fieldLogger) WithFields(f F) Logger {
 	return (*entry)(unsafe.Pointer(l.log.WithFields(logrus.Fields(f))))
+}
+
+func (l fieldLogger) State(f func(Logger)) State {
+	return state(func() { f(l) })
 }
 
 func (l fieldLogger) IfErr(fn func(Logger)) ErrState {
@@ -199,6 +213,10 @@ func (e *entry) WithFields(f F) Logger {
 	))
 }
 
+func (e *entry) State(f func(Logger)) State {
+	return state(func() { f(e) })
+}
+
 func (e *entry) IfErr(fn func(Logger)) ErrState {
 	return errState(func(err error) {
 		if err != nil {
@@ -236,6 +254,7 @@ func (noop) WithLocus(string) Logger              { return noop{} }
 func (noop) WithError(error) Logger               { return noop{} }
 func (noop) WithField(string, interface{}) Logger { return noop{} }
 func (noop) WithFields(F) Logger                  { return noop{} }
+func (noop) State(func(Logger)) State             { return state(func() {}) }
 func (noop) IfErr(func(Logger)) ErrState          { return errState(noState) }
 func (noop) IfNoErr(func(Logger)) ErrState        { return errState(noState) }
 
