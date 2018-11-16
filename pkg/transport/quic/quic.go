@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 
 	"github.com/SentimensRG/ctx"
+	"github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
@@ -85,11 +86,14 @@ type Transport struct {
 
 // Dial the specified address
 func (t *Transport) Dial(c context.Context, a net.Addr) (net.Conn, error) {
+	log.Get(c).Debug("dialing")
+
 	sess, err := quic.DialAddrContext(c, a.String(), t.t, t.q)
 	if err != nil {
 		return nil, errors.Wrap(err, "dial")
-
 	}
+
+	log.Get(c).Debug("negotiating")
 
 	conn := mkConn(sess)
 	if err := net.NegotiateConn(c, a.ID(), conn); err != nil {

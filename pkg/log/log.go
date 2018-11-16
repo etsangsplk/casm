@@ -52,6 +52,14 @@ func Set(c context.Context, l Logger) context.Context {
 	return context.WithValue(c, keyLogger, l)
 }
 
+// Maybe returns the logger, defaulting to a NoOp
+func Maybe(c context.Context) Logger {
+	if l, ok := c.Value(keyLogger).(Logger); ok {
+		return l
+	}
+	return noop{}
+}
+
 // State is a deferrable function
 type State interface {
 	Eval()

@@ -125,6 +125,11 @@ func (bh basicHost) Register(path string, h net.Handler) {
 func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
 
 func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s net.Stream, err error) {
+	log := bh.log.WithFields(log.F{
+		"remote_peer": a.Addr(),
+		"path":        path,
+	})
+
 	conn, err := bh.peers.Get(a.Addr())
 	if err != nil {
 		return nil, errors.Wrap(err, "get peer")
@@ -134,32 +139,48 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 	cherr1 := make(chan error)
 
 	go func() {
-		var e error
-		if s, e = conn.Stream().Open(); e != nil {
-			bh.log.WithError(e).Warn("open stream")
-			e = errors.Wrap(e, "open stream")
-		}
+		ch := make(chan error, 1)
+		go func() {
+			var e error
+			if s, e = conn.Stream().Open(); e != nil {
+				e = errors.Wrap(e, "open stream")
+			}
+			ch <- e
+		}()
 
 		select {
 		case <-c.Done():
-		case cherr0 <- e:
+		case e := <-ch:
+			select {
+			case <-c.Done():
+			case cherr0 <- e:
+			}
 		}
 	}()
 
 	go func() {
+		ch := make(chan error, 1)
+
 		select {
 		case <-c.Done():
 		case e := <-cherr0:
 			if e == nil {
-				e = binary.Write(s, binary.BigEndian, path)
+				go func() {
+					if e = binary.Write(s, binary.BigEndian, path); e != nil {
+						log.WithError(e).Warn("write path")
+						e = errors.Wrap(e, "write path")
+						s.Close() // TODO:  CloseWithError
+					}
+					ch <- e
+				}()
 			}
 
 			select {
 			case <-c.Done():
-			case cherr1 <- errors.Wrap(e, "write path"):
-				if e != nil {
-					bh.log.WithError(e).Warn("write path")
-					s.Close() // TODO:  CloseWithError
+			case e := <-ch:
+				select {
+				case <-c.Done():
+				case cherr1 <- e:
 				}
 			}
 		}

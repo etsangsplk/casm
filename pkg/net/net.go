@@ -8,18 +8,17 @@ import (
 	"net"
 	"time"
 
+	"github.com/lthibault/casm/pkg/log"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-// NewAddr from an ID and an address stringer
-func NewAddr(id PeerID, a string) Addr {
-	return &addr{PeerID: id, addr: a}
+// Addr of a Host
+type Addr interface {
+	ID() PeerID
+	Addr() Addr
+	net.Addr
 }
-
-func (a addr) Addr() Addr      { return a }
-func (a addr) Network() string { return "udp" }
-func (a addr) String() string  { return a.addr }
 
 // ErrorCode is used to terminate a connection and signal an error
 type ErrorCode uint16
@@ -96,26 +95,32 @@ type Stream interface {
 	SetWriteDeadline(time.Time) error
 }
 
-// Addr of a Host
-type Addr interface {
-	ID() PeerID
-	Addr() Addr
-	net.Addr
-}
-
 type addr struct {
 	PeerID
 	addr string
 }
 
+// NewAddr from an ID and an address stringer
+func NewAddr(id PeerID, a string) Addr {
+	return &addr{PeerID: id, addr: a}
+}
+
+func (a addr) Addr() Addr      { return a }
+func (a addr) Network() string { return "udp" }
+func (a addr) String() string  { return a.addr }
+
 // NegotiateConn handles protocol negotiation
 func NegotiateConn(c context.Context, local PeerID, conn RawConn) error {
+	log := log.Maybe(c).WithLocus("net")
+	log.Debug("opening stream")
+
 	s, err := conn.Stream().Open()
 	if err != nil {
 		return errors.Wrap(err, "open stream")
 	}
 	defer s.Close()
 
+	log.Debug("setting deadline")
 	if t, ok := c.Deadline(); ok {
 		if err = s.SetDeadline(t); err != nil {
 			return errors.Wrap(err, "set deadlines")
