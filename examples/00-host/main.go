@@ -2,22 +2,22 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/lthibault/casm/pkg/host"
 	clog "github.com/lthibault/casm/pkg/log"
 	"github.com/lthibault/casm/pkg/net"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 var c = context.Background()
+var timeout = time.Second * 60
 
 var l clog.Logger
 
 func init() {
-	lgrs := logrus.New()
-	lgrs.SetLevel(logrus.DebugLevel)
+	lgrs := log.New()
+	lgrs.SetLevel(log.DebugLevel)
 	l = clog.WrapLogrus(lgrs)
 }
 
@@ -32,7 +32,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("registering stream")
 	h0.Stream().Register("/echo", net.HandlerFunc(func(s net.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
@@ -54,16 +53,15 @@ func main() {
 		}
 	}))
 
-	connCtx, cancel := context.WithTimeout(c, time.Second*10)
+	connCtx, cancel := context.WithTimeout(c, timeout)
 	defer cancel()
 
-	log.Println("connecting")
 	// Connect the hosts to each other
 	if err := h0.Network().Connect(connCtx, h1); err != nil {
 		log.Fatal(err)
 	}
 
-	streamCtx, cancel := context.WithTimeout(c, time.Second*10)
+	streamCtx, cancel := context.WithTimeout(c, timeout)
 
 	// Open a stream
 	c, cancel := context.WithTimeout(streamCtx, time.Second)

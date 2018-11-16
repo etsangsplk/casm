@@ -3,7 +3,6 @@ package host
 import (
 	"crypto/tls"
 
-	radix "github.com/armon/go-radix"
 	log "github.com/lthibault/casm/pkg/log"
 	net "github.com/lthibault/casm/pkg/net"
 	quic "github.com/lthibault/casm/pkg/transport/quic"
@@ -40,14 +39,15 @@ func (c *cfg) mkHost() *basicHost {
 		c.t = quic.New(c.id, quic.OptQuic(c.qc), quic.OptTLS(c.tc))
 	}
 
-	return &basicHost{
-		addr:  c.Addr,
-		id:    c.id,
-		t:     c.t,
-		l:     c.l,
-		mux:   &mux{radixRouter: (*radixRouter)(radix.New())},
-		peers: &peerStore{m: make(map[net.PeerID]net.Conn)},
-	}
+	bh := new(basicHost)
+	bh.addr = c.Addr
+	bh.id = c.id
+	bh.t = c.t
+	bh.log = c.l.WithField("id", c.id).WithLocus("host")
+	bh.mux = newMux()
+	bh.peers = &peerStore{m: make(map[net.PeerID]net.Conn)}
+
+	return bh
 }
 
 // Option represents a setting
@@ -73,7 +73,7 @@ func OptTransport(t net.Transport) Option {
 func OptLogger(log log.Logger) Option {
 	return func(c *cfg) (prev Option) {
 		prev = OptLogger(c.l)
-		c.l = log.WithField("locus", "host")
+		c.l = log
 		return
 	}
 }

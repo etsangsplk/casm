@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/SentimensRG/ctx"
+	"github.com/SentimensRG/ctx/mergectx"
 
 	radix "github.com/armon/go-radix"
 	casm "github.com/lthibault/casm/pkg"
@@ -39,11 +40,11 @@ type Host interface {
 }
 
 type basicHost struct {
-	l    log.Logger
-	c    context.Context
-	id   casm.IDer
-	addr string
-	*mux
+	log   log.Logger
+	c     context.Context
+	id    casm.IDer
+	addr  string
+	mux   *mux
 	peers *peerStore
 	t     net.Transport
 }
@@ -58,8 +59,7 @@ func New(opt ...Option) Host {
 	return cfg.mkHost()
 }
 
-func (bh basicHost) log() log.Logger { return bh.l }
-func (bh basicHost) Addr() net.Addr  { return net.NewAddr(bh.id.ID(), bh.addr) }
+func (bh basicHost) Addr() net.Addr { return net.NewAddr(bh.id.ID(), bh.addr) }
 
 func (bh basicHost) Network() Network {
 	if bh.c == nil {
@@ -83,20 +83,25 @@ func (bh basicHost) Context() context.Context {
 }
 
 func (bh *basicHost) ListenAndServe(c context.Context) error {
+	bh.log = bh.log.WithFields(log.F{
+		"id":         bh.id.ID(),
+		"local_peer": bh.Addr(),
+	})
+	bh.log.Info("starting host")
 	bh.c = c
 
-	l, err := bh.t.Listen(c, bh.Addr())
+	l, err := bh.t.Listen(bh.c, bh.Addr())
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-	ctx.Defer(c, func() { l.Close() })
+	ctx.Defer(bh.c, func() { l.Close() })
 
 	go func() {
-		for range ctx.Tick(c) {
-			if conn, err := l.Accept(c); err != nil {
-				bh.log().WithError(err).Warn("accept conn")
+		for range ctx.Tick(bh.c) {
+			if conn, err := l.Accept(bh.c); err != nil {
+				bh.log.WithError(err).Warn("accept conn")
 			} else if err = bh.peers.Add(conn); err != nil {
-				bh.log().WithError(err).Warn("store peer")
+				bh.log.WithError(err).Warn("store peer")
 			} else {
 				ctx.Defer(conn.Context(), func() {
 					bh.Disconnect(conn.Endpoint().Remote())
@@ -112,6 +117,13 @@ func (bh *basicHost) ListenAndServe(c context.Context) error {
 	implment StreamManager
 */
 
+func (bh basicHost) Register(path string, h net.Handler) {
+	c := log.Set(bh.c, bh.log.WithLocus("mux"))
+	bh.mux.Register(c, path, h)
+}
+
+func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
+
 func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s net.Stream, err error) {
 	conn, err := bh.peers.Get(a.Addr())
 	if err != nil {
@@ -124,7 +136,7 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 	go func() {
 		var e error
 		if s, e = conn.Stream().Open(); e != nil {
-			bh.log().WithError(e).Warn("open stream")
+			bh.log.WithError(e).Warn("open stream")
 			e = errors.Wrap(e, "open stream")
 		}
 
@@ -146,7 +158,7 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 			case <-c.Done():
 			case cherr1 <- errors.Wrap(e, "write path"):
 				if e != nil {
-					bh.log().WithError(e).Warn("write path")
+					bh.log.WithError(e).Warn("write path")
 					s.Close() // TODO:  CloseWithError
 				}
 			}
@@ -167,9 +179,13 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 */
 
 func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
+	l := bh.log.WithField("remote_peer", a.Addr())
+	l.Debug("connecting")
+
+	c = log.Set(c, l.WithLocus("transport"))
 	conn, err := bh.t.Dial(c, a.Addr())
 	if err != nil {
-		bh.log().WithField("addr", a.Addr()).WithError(err).Debug("connect")
+		bh.log.WithField("addr", a.Addr()).WithError(err).Debug("connect")
 		return errors.Wrap(err, "transport")
 	}
 
@@ -220,21 +236,36 @@ func (p *peerStore) Del(id casm.IDer) (conn net.Conn, ok bool) {
 
 type radixRouter radix.Tree
 
-func (r *radixRouter) Insert(path string, h net.Handler) {
-	(*radix.Tree)(unsafe.Pointer(r)).Insert(path, h)
+func (r *radixRouter) Insert(path string, b bind) {
+	(*radix.Tree)(unsafe.Pointer(r)).Insert(path, b)
 }
 
-func (r *radixRouter) Delete(path string) {
-	(*radix.Tree)(unsafe.Pointer(r)).Delete(path)
+func (r *radixRouter) Delete(path string) (b bind, ok bool) {
+	var v interface{}
+	if v, ok = (*radix.Tree)(unsafe.Pointer(r)).Delete(path); ok {
+		b = v.(bind)
+	}
+	return
 }
 
-func (r *radixRouter) ServeStream(s net.Stream) {
+func (r *radixRouter) Serve(s net.Stream) {
 	h, ok := (*radix.Tree)(unsafe.Pointer(r)).Get(s.Path())
 	if !ok {
 		s.Close() // TODO:  implement Stream.CloseWithError ?
 	}
 
-	go h.(net.Handler).ServeStream(s)
+	go h.(net.Handler).Serve(s)
+}
+
+type bind struct {
+	c context.Context
+	h net.Handler
+}
+
+func (b bind) Serve(s net.Stream) {
+	c := mergectx.Link(b.c, s.Context())
+	c = log.Set(c, log.Get(c).WithLocus("handler"))
+	go b.h.Serve(net.Bind(c, s))
 }
 
 type mux struct {
@@ -242,20 +273,27 @@ type mux struct {
 	*radixRouter
 }
 
-func (m *mux) Register(path string, h net.Handler) {
+func newMux() *mux {
+	return &mux{radixRouter: (*radixRouter)(radix.New())}
+}
+
+func (m *mux) Register(c context.Context, path string, h net.Handler) {
 	m.lock.Lock()
-	m.Insert(path, h)
+	log.Get(c).WithFields(log.F{"path": path, "handler": h}).Debug("registered")
+	m.Insert(path, bind{c: c, h: h})
 	m.lock.Unlock()
 }
 
 func (m *mux) Unregister(path string) {
 	m.lock.Lock()
-	m.Delete(path)
+	if b, ok := m.Delete(path); ok {
+		log.Get(b.c).Debug("unregistered")
+	}
 	m.lock.Unlock()
 }
 
-func (m *mux) ServeStream(s net.Stream) {
+func (m *mux) Serve(s net.Stream) {
 	m.lock.RLock()
-	m.ServeStream(s)
+	m.Serve(s)
 	m.lock.RUnlock()
 }

@@ -1,9 +1,14 @@
 package log
 
 import (
+	"context"
 	"unsafe"
 
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	locusLabel = "locus"
 )
 
 // F is a set of fields
@@ -27,9 +32,20 @@ type Logger interface {
 	Errorf(string, ...interface{})
 	Errorln(...interface{})
 
+	WithLocus(string) Logger
 	WithError(error) Logger
 	WithField(string, interface{}) Logger
 	WithFields(F) Logger
+}
+
+// Get Logger
+func Get(c context.Context) Logger {
+	return c.Value(keyLogger).(Logger)
+}
+
+// Set logger
+func Set(c context.Context, l Logger) context.Context {
+	return context.WithValue(c, keyLogger, l)
 }
 
 type fieldLogger struct {
@@ -76,6 +92,9 @@ func (l fieldLogger) Errorf(fmt string, v ...interface{}) {
 }
 func (l fieldLogger) Errorln(v ...interface{}) {
 	l.log.Errorln(v...)
+}
+func (l fieldLogger) WithLocus(locus string) Logger {
+	return l.WithField(locusLabel, locus)
 }
 func (l fieldLogger) WithError(err error) Logger {
 	return (*entry)(unsafe.Pointer(l.log.WithError(err)))
@@ -129,18 +148,19 @@ func (e *entry) Errorln(v ...interface{}) {
 	(*logrus.Entry)(unsafe.Pointer(e)).Errorln(v...)
 }
 
+func (e *entry) WithLocus(locus string) Logger {
+	return e.WithField(locusLabel, locus)
+}
 func (e *entry) WithError(err error) Logger {
 	return (*entry)(unsafe.Pointer(
 		(*logrus.Entry)(unsafe.Pointer(e)).WithError(err),
 	))
 }
-
 func (e *entry) WithField(k string, v interface{}) Logger {
 	return (*entry)(unsafe.Pointer(
 		(*logrus.Entry)(unsafe.Pointer(e)).WithField(k, v),
 	))
 }
-
 func (e *entry) WithFields(f F) Logger {
 	return (*entry)(unsafe.Pointer(
 		(*logrus.Entry)(unsafe.Pointer(e)).WithFields(
@@ -166,6 +186,7 @@ func (noop) Warnln(...interface{})                {}
 func (noop) Error(...interface{})                 {}
 func (noop) Errorf(string, ...interface{})        {}
 func (noop) Errorln(...interface{})               {}
+func (noop) WithLocus(string) Logger              { return noop{} }
 func (noop) WithError(error) Logger               { return noop{} }
 func (noop) WithField(string, interface{}) Logger { return noop{} }
 func (noop) WithFields(F) Logger                  { return noop{} }

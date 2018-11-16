@@ -1,14 +1,11 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
 	"io"
 	"io/ioutil"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/SentimensRG/ctx"
 	net "github.com/lthibault/casm/pkg/net"
@@ -28,68 +25,8 @@ func mkConn(s quic.Session) *conn {
 	return &conn{Session: s}
 }
 
-func (conn *conn) Negotiate(c context.Context, id net.PeerID) (*conn, error) {
-	conn.local = id
-
-	s, err := conn.Session.OpenStream()
-	if err != nil {
-		return nil, errors.Wrap(err, "open stream")
-	}
-	defer s.Close()
-
-	if t, ok := c.Deadline(); ok {
-		if err = s.SetDeadline(t); err != nil {
-			return nil, errors.Wrap(err, "set deadlines")
-		}
-	}
-
-	var g errgroup.Group
-
-	g.Go(func() error {
-		ch := make(chan error, 1)
-
-		go func() {
-			b := new(bytes.Buffer)
-			if _, err = io.Copy(b, io.LimitReader(s, 8)); err != nil {
-				ch <- errors.Wrap(err, "read header")
-				close(ch)
-				return
-			}
-
-			conn.remote = net.PeerID(binary.BigEndian.Uint64(b.Bytes()))
-		}()
-
-		var err error
-		select {
-		case err = <-ch:
-		case <-c.Done():
-			err = c.Err()
-		}
-
-		return errors.Wrap(err, "recv header")
-	})
-
-	g.Go(func() error {
-		ch := make(chan error, 1)
-		go func() {
-			err := binary.Write(s, binary.BigEndian, id.ID())
-			ch <- errors.Wrap(err, "write")
-			close(ch)
-		}()
-
-		var err error
-		select {
-		case err = <-ch:
-		case <-c.Done():
-			err = c.Err()
-		}
-
-		return errors.Wrap(err, "send header")
-	})
-
-	return conn, g.Wait()
-}
-
+func (conn *conn) SetLocalID(id net.PeerID)   { conn.local = id }
+func (conn *conn) SetRemoteID(id net.PeerID)  { conn.remote = id }
 func (conn *conn) Stream() net.Streamer       { return conn }
 func (conn conn) Accept() (net.Stream, error) { return conn.Accept() }
 
@@ -147,15 +84,19 @@ type Transport struct {
 }
 
 // Dial the specified address
-func (t *Transport) Dial(c context.Context, a net.Addr) (conn net.Conn, err error) {
-	var sess quic.Session
-	if sess, err = quic.DialAddrContext(c, a.String(), t.t, t.q); err != nil {
-		err = errors.Wrap(err, "dial")
-	} else if conn, err = mkConn(sess).Negotiate(c, a.ID()); err != nil {
-		err = errors.Wrap(err, "negotiate")
+func (t *Transport) Dial(c context.Context, a net.Addr) (net.Conn, error) {
+	sess, err := quic.DialAddrContext(c, a.String(), t.t, t.q)
+	if err != nil {
+		return nil, errors.Wrap(err, "dial")
+
 	}
 
-	return
+	conn := mkConn(sess)
+	if err := net.NegotiateConn(c, a.ID(), conn); err != nil {
+		return nil, errors.Wrap(err, "negotiate")
+	}
+
+	return conn, nil
 }
 
 // Listen on the specified address
@@ -197,8 +138,12 @@ func (l listener) Accept(c context.Context) (conn net.Conn, err error) {
 			return
 		}
 
-		conn, err = mkConn(sess).Negotiate(c, l.ID())
-		err = errors.Wrap(err, "negotiate")
+		rawConn := mkConn(sess)
+		if err = net.NegotiateConn(c, l.ID(), rawConn); err != nil {
+			err = errors.Wrap(err, "negotiate")
+		} else {
+			conn = rawConn
+		}
 	}
 
 	return

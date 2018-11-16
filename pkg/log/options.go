@@ -7,6 +7,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type key uint16
+
+const (
+	keyLogger key = iota
+)
+
 // Cfg creates a Logger using the logrus library
 type Cfg struct {
 	Hooks     logrus.LevelHooks
