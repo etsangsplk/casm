@@ -36,6 +36,9 @@ type Logger interface {
 	WithError(error) Logger
 	WithField(string, interface{}) Logger
 	WithFields(F) Logger
+
+	IfErr(func(Logger)) ErrState
+	IfNoErr(func(Logger)) ErrState
 }
 
 // Get Logger
@@ -46,6 +49,17 @@ func Get(c context.Context) Logger {
 // Set logger
 func Set(c context.Context, l Logger) context.Context {
 	return context.WithValue(c, keyLogger, l)
+}
+
+// ErrState is a deferrable error check
+type ErrState interface {
+	Eval(error)
+}
+
+type errState func(error)
+
+func (f errState) Eval(err error) {
+	f(err)
 }
 
 type fieldLogger struct {
@@ -104,6 +118,22 @@ func (l fieldLogger) WithField(k string, v interface{}) Logger {
 }
 func (l fieldLogger) WithFields(f F) Logger {
 	return (*entry)(unsafe.Pointer(l.log.WithFields(logrus.Fields(f))))
+}
+
+func (l fieldLogger) IfErr(fn func(Logger)) ErrState {
+	return errState(func(err error) {
+		if err != nil {
+			fn(l)
+		}
+	})
+}
+
+func (l fieldLogger) IfNoErr(fn func(Logger)) ErrState {
+	return errState(func(err error) {
+		if err == nil {
+			fn(l)
+		}
+	})
 }
 
 type entry logrus.Entry
@@ -169,11 +199,27 @@ func (e *entry) WithFields(f F) Logger {
 	))
 }
 
+func (e *entry) IfErr(fn func(Logger)) ErrState {
+	return errState(func(err error) {
+		if err != nil {
+			fn(e)
+		}
+	})
+}
+
+func (e *entry) IfNoErr(fn func(Logger)) ErrState {
+	return errState(func(err error) {
+		if err == nil {
+			fn(e)
+		}
+	})
+}
+
 type noop struct{}
 
 // NoOp returns a Logger that does nothing
-func NoOp() Logger { return noop{} }
-
+func NoOp() Logger                                { return noop{} }
+func noState(error)                               {}
 func (noop) Debug(...interface{})                 {}
 func (noop) Debugf(string, ...interface{})        {}
 func (noop) Debugln(...interface{})               {}
@@ -190,6 +236,8 @@ func (noop) WithLocus(string) Logger              { return noop{} }
 func (noop) WithError(error) Logger               { return noop{} }
 func (noop) WithField(string, interface{}) Logger { return noop{} }
 func (noop) WithFields(F) Logger                  { return noop{} }
+func (noop) IfErr(func(Logger)) ErrState          { return errState(noState) }
+func (noop) IfNoErr(func(Logger)) ErrState        { return errState(noState) }
 
 // New logger
 func New(opt ...Option) Logger {

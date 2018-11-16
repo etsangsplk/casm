@@ -178,18 +178,22 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s ne
 	Implement Network
 */
 
-func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
+func (bh basicHost) Connect(c context.Context, a casm.Addresser) (err error) {
 	l := bh.log.WithField("remote_peer", a.Addr())
-	l.Debug("connecting")
+	defer l.IfNoErr(func(l log.Logger) {
+		l.Debug("connecting")
+	}).Eval(err)
 
 	c = log.Set(c, l.WithLocus("transport"))
 	conn, err := bh.t.Dial(c, a.Addr())
 	if err != nil {
 		bh.log.WithField("addr", a.Addr()).WithError(err).Debug("connect")
-		return errors.Wrap(err, "transport")
+		err = errors.Wrap(err, "transport")
+	} else {
+		err = errors.Wrap(bh.peers.Add(conn), "add peer")
 	}
 
-	return errors.Wrap(bh.peers.Add(conn), "add peer")
+	return
 }
 
 func (bh basicHost) Disconnect(id casm.IDer) {
