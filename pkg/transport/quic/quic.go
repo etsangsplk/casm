@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -27,8 +28,8 @@ func mkConn(s quic.Session) *conn {
 	return &conn{Session: s}
 }
 
-func (conn *conn) Negotiate(c context.Context, id net.IDer) (*conn, error) {
-	conn.local = id.ID()
+func (conn *conn) Negotiate(c context.Context, id net.PeerID) (*conn, error) {
+	conn.local = id
 
 	s, err := conn.Session.OpenStream()
 	if err != nil {
@@ -46,35 +47,44 @@ func (conn *conn) Negotiate(c context.Context, id net.IDer) (*conn, error) {
 
 	g.Go(func() error {
 		ch := make(chan error, 1)
+		defer close(ch)
+
 		go func() {
-			if hdr, err := ioutil.ReadAll(io.LimitReader(s, 8)); err != nil {
-				conn.remote = net.PeerID(binary.BigEndian.Uint64(hdr))
+			b := new(bytes.Buffer)
+			if _, err = io.Copy(b, io.LimitReader(s, 8)); err != nil {
+				ch <- errors.Wrap(err, "read header")
+				return
 			}
-			ch <- err
-			close(ch)
+
+			conn.remote = net.PeerID(binary.BigEndian.Uint64(b.Bytes()))
 		}()
 
+		var err error
 		select {
-		case err := <-ch:
-			return errors.Wrap(err, "read header")
+		case err = <-ch:
 		case <-c.Done():
-			return c.Err()
+			err = c.Err()
 		}
+
+		return errors.Wrap(err, "recv header")
 	})
 
 	g.Go(func() error {
 		ch := make(chan error, 1)
 		go func() {
-			ch <- binary.Write(s, binary.BigEndian, id.ID())
+			err := binary.Write(s, binary.BigEndian, id.ID())
+			ch <- errors.Wrap(err, "write")
 			close(ch)
 		}()
 
+		var err error
 		select {
-		case err := <-ch:
-			return errors.Wrap(err, "write header")
+		case err = <-ch:
 		case <-c.Done():
-			return c.Err()
+			err = c.Err()
 		}
+
+		return errors.Wrap(err, "send header")
 	})
 
 	return conn, g.Wait()
@@ -131,7 +141,7 @@ func (s stream) Endpoint() net.EndpointPair { return s.EndpointPair }
 
 // Transport over QUIC
 type Transport struct {
-	net.IDer
+	net.PeerID
 	q *Config
 	t *tls.Config
 }
@@ -141,7 +151,7 @@ func (t *Transport) Dial(c context.Context, a net.Addr) (conn net.Conn, err erro
 	var sess quic.Session
 	if sess, err = quic.DialAddrContext(c, a.String(), t.t, t.q); err != nil {
 		err = errors.Wrap(err, "dial")
-	} else if conn, err = mkConn(sess).Negotiate(c, a); err != nil {
+	} else if conn, err = mkConn(sess).Negotiate(c, a.ID()); err != nil {
 		err = errors.Wrap(err, "negotiate")
 	}
 
@@ -156,11 +166,11 @@ func (t *Transport) Listen(c context.Context, a net.Addr) (net.Listener, error) 
 	}
 	ctx.Defer(c, func() { l.Close() })
 
-	return &listener{Listener: l, IDer: t.ID()}, nil
+	return &listener{Listener: l, PeerID: t.PeerID}, nil
 }
 
 type listener struct {
-	net.IDer
+	net.PeerID
 	quic.Listener
 }
 
@@ -195,8 +205,8 @@ func (l listener) Accept(c context.Context) (conn net.Conn, err error) {
 }
 
 // New Transport over QUIC
-func New(id net.IDer, opt ...Option) *Transport {
-	t := &Transport{IDer: id.ID()}
+func New(id net.PeerID, opt ...Option) *Transport {
+	t := &Transport{PeerID: id}
 	for _, o := range opt {
 		o(t)
 	}

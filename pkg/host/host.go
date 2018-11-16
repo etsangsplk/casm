@@ -38,8 +38,9 @@ type Host interface {
 }
 
 type basicHost struct {
+	log  casm.Logger
 	c    context.Context
-	id   net.IDer
+	id   casm.IDer
 	addr string
 	*mux
 	peers *peerStore

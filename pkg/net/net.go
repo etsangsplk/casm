@@ -74,11 +74,6 @@ type Stream interface {
 	SetWriteDeadline(time.Time) error
 }
 
-// IDer can provide a PeerID
-type IDer interface {
-	ID() PeerID
-}
-
 // PeerID is a unique identifier for a Node
 type PeerID uint64
 
@@ -89,19 +84,19 @@ func (id PeerID) ID() PeerID { return id }
 
 // Addr of a Host
 type Addr interface {
-	IDer
+	ID() PeerID
 	Addr() Addr
 	net.Addr
 }
 
 type addr struct {
-	IDer
+	PeerID
 	addr string
 }
 
 // NewAddr from an ID and an address stringer
-func NewAddr(id IDer, a string) Addr {
-	return &addr{IDer: id, addr: a}
+func NewAddr(id PeerID, a string) Addr {
+	return &addr{PeerID: id, addr: a}
 }
 
 func (a addr) Addr() Addr      { return a }

@@ -48,14 +48,19 @@ func main() {
 		}
 	}))
 
+	connCtx, cancel := context.WithTimeout(c, time.Second*10)
+	defer cancel()
+
 	log.Println("connecting")
 	// Connect the hosts to each other
-	if err = h0.Network().Connect(context.Background(), h1); err != nil {
+	if err = h0.Network().Connect(connCtx, h1); err != nil {
 		log.Fatal(err)
 	}
 
+	streamCtx, cancel := context.WithTimeout(c, time.Second*10)
+
 	// Open a stream
-	c, cancel := context.WithTimeout(context.Background(), time.Second)
+	c, cancel := context.WithTimeout(streamCtx, time.Second)
 	defer cancel()
 
 	s, err := h1.Stream().Open(c, h0, "/echo")
