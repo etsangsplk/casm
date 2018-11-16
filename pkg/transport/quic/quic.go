@@ -184,9 +184,11 @@ func (l listener) Accept(c context.Context) (conn net.Conn, err error) {
 		err = c.Err()
 	case err = <-cherr:
 		if err != nil {
-			conn, err = mkConn(sess).Negotiate(c, l.ID())
-			err = errors.Wrap(err, "negotiate")
+			return
 		}
+
+		conn, err = mkConn(sess).Negotiate(c, l.ID())
+		err = errors.Wrap(err, "negotiate")
 	}
 
 	return
