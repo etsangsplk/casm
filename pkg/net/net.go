@@ -72,7 +72,7 @@ type Conn struct {
 
 // Endpoint provides address information
 func (c Conn) Endpoint() Edge {
-	ep := c.Endpoint()
+	ep := c.Conn.Endpoint()
 	local := ep.Local()
 	remote := ep.Remote()
 	return Edge{
@@ -90,15 +90,45 @@ func (e Edge) Local() Addr { return e.local }
 // Remote peer address
 func (e Edge) Remote() Addr { return e.remote }
 
+// Streamer can open and close various types of streams
+type Streamer struct {
+	e Edge
+	pipe.Streamer
+}
+
+func (s Streamer) mkStream(ps func() (pipe.Stream, error)) (Stream, error) {
+	strm, err := ps()
+	return Stream{e: s.e, Stream: strm}, err
+}
+
+// Accept stream
+func (s Streamer) Accept() (Stream, error) {
+	return s.mkStream(s.Streamer.Accept)
+}
+
+// Open stream
+func (s Streamer) Open() (Stream, error) {
+	return s.mkStream(s.Streamer.Open)
+}
+
+// Stream is a bidirectional connection between two hosts.
+type Stream struct {
+	e Edge
+	pipe.Stream
+}
+
+// Endpoint provides address information
+func (s Stream) Endpoint() Edge { return s.e }
+
 // Handler responds to an incoming stream connection
 type Handler interface {
-	Serve(pipe.Stream)
+	Serve(Stream)
 }
 
 // HandlerFunc is an adapter to allow the use of ordinary functions as stream
 // handlers.  If f is a function with the appropriate signature, HandlerFunc(f)
 // is a Handler that calls f.
-type HandlerFunc func(pipe.Stream)
+type HandlerFunc func(Stream)
 
 // Serve satisfies Handler.  It calls h.
-func (h HandlerFunc) Serve(s pipe.Stream) { h(s) }
+func (h HandlerFunc) Serve(s Stream) { h(s) }
