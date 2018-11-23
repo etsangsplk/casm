@@ -13,6 +13,7 @@ import (
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
 	log "github.com/lthibault/log/pkg"
+	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/pkg/errors"
 )
 
@@ -26,7 +27,7 @@ type Network interface {
 type StreamManager interface {
 	Register(string, net.Handler)
 	Unregister(string)
-	Open(context.Context, casm.Addresser, string) (net.Stream, error)
+	Open(context.Context, casm.Addresser, string) (pipe.Stream, error)
 }
 
 // Host is a logical machine in a compute cluster.  It acts both as a server and
@@ -42,24 +43,23 @@ type Host interface {
 type basicHost struct {
 	log   log.Logger
 	c     context.Context
-	id    casm.IDer
-	addr  string
+	a     net.Addr
 	mux   *mux
 	peers *peerStore
-	t     net.Transport
+	t     pipe.Transport
 }
 
 // New Host whose lifetime is bound to the context c.
 func New(opt ...Option) Host {
 	cfg := new(cfg)
-	for _, fn := range defaultOpts(opt...) {
+	for _, fn := range opt {
 		fn(cfg)
 	}
 
 	return cfg.mkHost()
 }
 
-func (bh basicHost) Addr() net.Addr { return net.NewAddr(bh.id.ID(), bh.addr) }
+func (bh basicHost) Addr() net.Addr { return bh.a }
 
 func (bh basicHost) Network() Network {
 	if bh.c == nil {
@@ -79,14 +79,14 @@ func (bh basicHost) Context() context.Context {
 
 func (bh *basicHost) ListenAndServe(c context.Context) error {
 	bh.log = bh.log.WithFields(log.F{
-		"id":         bh.id.ID(),
-		"local_peer": bh.Addr(),
+		"id":         bh.a.ID(),
+		"local_peer": bh.a,
 	})
 	bh.log.Info("starting host")
 	bh.c = log.Set(c, bh.log)
 	c = log.Set(c, bh.log.WithLocus("transport"))
 
-	l, err := bh.t.Listen(c, bh.Addr())
+	l, err := bh.t.Listen(c, bh.a)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
@@ -97,7 +97,7 @@ func (bh *basicHost) ListenAndServe(c context.Context) error {
 	return nil
 }
 
-func (bh basicHost) startAccepting(l net.Listener) {
+func (bh basicHost) startAccepting(l pipe.Listener) {
 	bh.log.Debug("accepting connections")
 	listenLog := bh.log.WithLocus("listener")
 	listenCtx := log.Set(bh.c, listenLog)
@@ -127,7 +127,7 @@ func (bh basicHost) handle(conn net.Conn) {
 	bh.log.Debug("accepting streams")
 
 	var err error
-	var s net.Stream
+	var s pipe.Stream
 	for range ctx.Tick(ctx.Link(bh.c, conn.Context())) {
 		if s, err = conn.Stream().Accept(); err != nil {
 			bh.log.WithError(err).Warn("accept stream")
@@ -149,7 +149,7 @@ func (bh basicHost) Register(path string, h net.Handler) {
 
 func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
 
-func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s net.Stream, err error) {
+func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s pipe.Stream, err error) {
 	log := bh.log.WithFields(log.F{
 		"remote_peer": a.Addr(),
 		"path":        path,
@@ -302,7 +302,7 @@ func (r *radixRouter) Delete(path string) (b bind, ok bool) {
 	return
 }
 
-func (r *radixRouter) Serve(s net.Stream) {
+func (r *radixRouter) Serve(s pipe.Stream) {
 	h, ok := (*radix.Tree)(unsafe.Pointer(r)).Get(s.Path())
 	if !ok {
 		s.Close() // TODO:  implement Stream.CloseWithError ?
@@ -316,7 +316,7 @@ type bind struct {
 	h net.Handler
 }
 
-func (b bind) Serve(s net.Stream) {
+func (b bind) Serve(s pipe.Stream) {
 	c := mergectx.Link(b.c, s.Context())
 	c = log.Set(c, log.Get(c).WithLocus("handler"))
 	b.h.Serve(net.Bind(c, s))
@@ -346,7 +346,7 @@ func (m *mux) Unregister(path string) {
 	m.lock.Unlock()
 }
 
-func (m *mux) Serve(s net.Stream) {
+func (m *mux) Serve(s pipe.Stream) {
 	m.lock.RLock()
 	m.radixRouter.Serve(s)
 	m.lock.RUnlock()

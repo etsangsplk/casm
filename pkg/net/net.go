@@ -1,187 +1,104 @@
 package net
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
-	"io"
-	"net"
-	"time"
 
-	log "github.com/lthibault/log/pkg"
+	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
-// Addr of a Host
-type Addr interface {
-	ID() PeerID
-	Addr() Addr
-	net.Addr
+// Transport is a means by which to connect to an listen for connections from
+// other peers.
+type Transport struct{ pipe.Transport }
+
+// Listen for connections
+func (t Transport) Listen(c context.Context, a Addr) (Listener, error) {
+	l, err := t.Transport.Listen(c, a)
+	return Listener{PeerID: a.ID(), Listener: l}, err
 }
 
-// ErrorCode is used to terminate a connection and signal an error
-type ErrorCode uint16
+// Dial into a remote listener
+func (t Transport) Dial(c context.Context, local PeerID, a Addr) (*Conn, error) {
+	conn, err := t.Transport.Dial(c, a)
+	if err != nil {
+		return nil, errors.Wrap(err, "transport")
+	}
+
+	raw := conn.(pipe.RawConn).Raw()
+
+	// send local ID to the peer
+	if err = binary.Write(raw, binary.BigEndian, local); err != nil {
+		raw.Close()
+		return nil, errors.Wrap(err, "handshake")
+	}
+
+	return &Conn{localID: local, remoteID: a.Addr().ID(), Conn: conn}, nil
+}
+
+// Listener can listen for incoming connections
+type Listener struct {
+	PeerID
+	pipe.Listener
+}
+
+// Addr is the local listen address
+func (l Listener) Addr() Addr {
+	return NewAddr(l.PeerID, l.Addr().Network(), l.Addr().String())
+}
+
+// Accept the next incoming connection
+func (l Listener) Accept(c context.Context) (*Conn, error) {
+	conn, err := l.Listener.Accept(c)
+	if err != nil {
+		return nil, errors.Wrap(err, "accept")
+	}
+
+	// get the remote ID
+	var remote PeerID
+	raw := conn.(pipe.RawConn).Raw()
+	if err = binary.Read(raw, binary.BigEndian, &remote); err != nil {
+		return nil, errors.Wrap(err, "handshake")
+	}
+
+	return &Conn{localID: l.Addr().ID(), remoteID: remote, Conn: conn}, nil
+}
+
+// Conn is a logical connection to a peer.  Streams are multiplexed onto Conns.
+type Conn struct {
+	localID, remoteID PeerID
+	pipe.Conn
+}
+
+// Endpoint provides address information
+func (c Conn) Endpoint() Edge {
+	ep := c.Endpoint()
+	local := ep.Local()
+	remote := ep.Remote()
+	return Edge{
+		local:  NewAddr(c.localID, local.Network(), local.String()),
+		remote: NewAddr(c.remoteID, remote.Network(), remote.String()),
+	}
+}
+
+// Edge provides the endpoints of a connection
+type Edge struct{ local, remote Addr }
+
+// Local peer address
+func (e Edge) Local() Addr { return e.local }
+
+// Remote peer address
+func (e Edge) Remote() Addr { return e.remote }
 
 // Handler responds to an incoming stream connection
 type Handler interface {
-	Serve(Stream)
+	Serve(pipe.Stream)
 }
 
 // HandlerFunc is an adapter to allow the use of ordinary functions as stream
 // handlers.  If f is a function with the appropriate signature, HandlerFunc(f)
 // is a Handler that calls f.
-type HandlerFunc func(Stream)
+type HandlerFunc func(pipe.Stream)
 
 // Serve satisfies Handler.  It calls h.
-func (h HandlerFunc) Serve(s Stream) { h(s) }
-
-// Transport is a means by which to connect to an listen for connections from
-// other peers.
-type Transport interface {
-	Listen(context.Context, Addr) (Listener, error)
-	Dial(context.Context, Addr) (Conn, error)
-}
-
-// Listener can listen for incoming connections
-type Listener interface {
-	// Close the server
-	Close() error
-	Addr() net.Addr
-	// Accept returns new connections; this should be called in a loop.
-	Accept(context.Context) (Conn, error)
-}
-
-// Conn represents a logical connection between two peers.  Streams are
-// multiplexed onto connections
-type Conn interface {
-	Context() context.Context
-	Stream() Streamer
-	Endpoint() EndpointPair
-	io.Closer
-	CloseWithError(ErrorCode, error) error
-}
-
-// RawConn is a connection for which protocol negotiation has not yet
-// occurred
-type RawConn interface {
-	Conn
-	SetLocalID(PeerID)
-	SetRemoteID(PeerID)
-}
-
-// Streamer can open and close various types of streams
-type Streamer interface {
-	Accept() (Stream, error)
-	Open() (Stream, error)
-}
-
-// EndpointPair identifies the two endpoints
-type EndpointPair interface {
-	Local() Addr
-	Remote() Addr
-}
-
-// Stream is a bidirectional connection between two hosts
-type Stream interface {
-	Path() string
-	Context() context.Context
-	Endpoint() EndpointPair
-	io.Closer
-	Read(b []byte) (n int, err error)
-	Write(b []byte) (n int, err error)
-	SetDeadline(time.Time) error
-	SetReadDeadline(time.Time) error
-	SetWriteDeadline(time.Time) error
-}
-
-type addr struct {
-	PeerID
-	addr string
-}
-
-// NewAddr from an ID and an address stringer
-func NewAddr(id PeerID, a string) Addr {
-	return &addr{PeerID: id, addr: a}
-}
-
-func (a addr) Addr() Addr      { return a }
-func (a addr) Network() string { return "udp" }
-func (a addr) String() string  { return a.addr }
-
-// NegotiateConn handles protocol negotiation
-func NegotiateConn(c context.Context, local PeerID, conn RawConn) error {
-	log := log.Maybe(c).WithLocus("net")
-	log.Debug("opening stream")
-
-	s, err := conn.Stream().Open()
-	if err != nil {
-		return errors.Wrap(err, "open stream")
-	}
-	defer s.Close()
-
-	log.Debug("setting deadline")
-	if t, ok := c.Deadline(); ok {
-		if err = s.SetDeadline(t); err != nil {
-			return errors.Wrap(err, "set deadlines")
-		}
-	}
-
-	var g errgroup.Group
-
-	g.Go(func() error {
-		ch := make(chan error, 1)
-
-		go func() {
-			b := new(bytes.Buffer)
-			if _, err = io.Copy(b, io.LimitReader(s, 8)); err != nil {
-				ch <- errors.Wrap(err, "read header")
-				close(ch)
-				return
-			}
-
-			conn.SetRemoteID(PeerID(binary.BigEndian.Uint64(b.Bytes())))
-		}()
-
-		var err error
-		select {
-		case err = <-ch:
-		case <-c.Done():
-			err = c.Err()
-		}
-
-		return errors.Wrap(err, "recv header")
-	})
-
-	g.Go(func() error {
-		ch := make(chan error, 1)
-		go func() {
-			err := binary.Write(s, binary.BigEndian, local)
-			ch <- errors.Wrap(err, "write")
-			close(ch)
-		}()
-
-		var err error
-		select {
-		case err = <-ch:
-		case <-c.Done():
-			err = c.Err()
-		}
-
-		return errors.Wrap(err, "send header")
-	})
-
-	return g.Wait()
-}
-
-type bind struct {
-	c context.Context
-	Stream
-}
-
-func (b bind) Context() context.Context { return b.c }
-
-// Bind context to a stream
-func Bind(c context.Context, s Stream) Stream {
-	return bind{c: c, Stream: s}
-}
+func (h HandlerFunc) Serve(s pipe.Stream) { h(s) }

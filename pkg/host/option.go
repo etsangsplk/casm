@@ -1,49 +1,43 @@
 package host
 
 import (
-	"crypto/tls"
-
 	net "github.com/lthibault/casm/pkg/net"
-	quic "github.com/lthibault/casm/pkg/transport/quic"
 	log "github.com/lthibault/log/pkg"
+	pipe "github.com/lthibault/pipewerks/pkg"
+	"github.com/lthibault/pipewerks/pkg/transport/inproc"
 	"github.com/pkg/errors"
+	"github.com/satori/uuid"
 )
 
 type cfg struct {
-	Addr              string
-	CertPath, KeyPath string
-	Insecure          bool
-
-	id net.PeerID
-	t  net.Transport
-	l  log.Logger
-	qc *quic.Config
-	tc *tls.Config
+	net.Addr
+	pipe.Transport
+	log.Logger
 }
 
 func (c *cfg) mkHost() *basicHost {
-	if c.t == nil {
-		if c.CertPath == "" && c.KeyPath == "" {
-			if !c.Insecure {
-				panic(errors.New("TLS required"))
-			}
-			c.tc = generateTLSConfig()
-		} else {
-			panic("LoadTLS NOT IMPLEMENTED")
-		}
+	id := net.New()
+	if c.Addr == nil {
+		net.NewAddr(id, "inproc", "/"+uuid.NewV4().String())
+	}
 
-		if c.qc == nil {
-			c.qc = defaultQUIC()
+	if c.Transport == nil {
+		switch c.Addr.Network() {
+		case "inproc":
+			c.Transport = inproc.New()
+		default:
+			panic(errors.Errorf("invalid network %s", c.Addr.Network()))
 		}
+	}
 
-		c.t = quic.New(c.id, quic.OptQuic(c.qc), quic.OptTLS(c.tc))
+	if c.Logger == nil {
+		c.Logger = log.New().WithFields(log.F{"id": id, "locus": "host"})
 	}
 
 	bh := new(basicHost)
-	bh.addr = c.Addr
-	bh.id = c.id
-	bh.t = c.t
-	bh.log = c.l.WithField("id", c.id).WithLocus("host")
+	bh.a = c.Addr
+	bh.t = c.Transport
+	bh.log = c.Logger
 	bh.mux = newMux()
 	bh.peers = &peerStore{m: make(map[net.PeerID]net.Conn)}
 
@@ -54,17 +48,18 @@ func (c *cfg) mkHost() *basicHost {
 type Option func(*cfg) Option
 
 // OptListenAddr sets the listen address
-func OptListenAddr(addr string) Option {
+func OptListenAddr(addr net.Addr) Option {
 	return func(c *cfg) (prev Option) {
+		prev = OptListenAddr(c.Addr)
 		c.Addr = addr
 		return
 	}
 }
 
 // OptTransport sets the transport
-func OptTransport(t net.Transport) Option {
+func OptTransport(t pipe.Transport) Option {
 	return func(c *cfg) (prev Option) {
-		c.t = t
+		c.Transport = t
 		return
 	}
 }
@@ -72,46 +67,8 @@ func OptTransport(t net.Transport) Option {
 // OptLogger sets the logger
 func OptLogger(log log.Logger) Option {
 	return func(c *cfg) (prev Option) {
-		prev = OptLogger(c.l)
-		c.l = log
+		prev = OptLogger(c.Logger)
+		c.Logger = log
 		return
 	}
-}
-
-func optSetID() Option {
-	return func(c *cfg) (prev Option) {
-		prev = optSetID()
-		c.id = net.New()
-		return
-	}
-}
-
-func defaultQUIC() *quic.Config {
-	return &quic.Config{
-		KeepAlive: true,
-	}
-}
-
-func maybeMkQUIC() Option {
-	return func(c *cfg) (prev Option) {
-		prev = OptTransport(c.t)
-		if c.t == nil {
-			tc := generateTLSConfig()
-			qc := defaultQUIC()
-
-			c.t = quic.New(c.id, quic.OptQuic(qc), quic.OptTLS(tc))
-		}
-		return
-	}
-}
-
-func defaultOpts(overrides ...Option) []Option {
-	opt := []Option{
-		OptLogger(log.New()),
-		optSetID(),
-		OptListenAddr("localhost:1987"),
-	}
-
-	overrides = append(overrides, maybeMkQUIC())
-	return append(opt, overrides...)
 }
