@@ -70,6 +70,14 @@ type Conn struct {
 	pipe.Conn
 }
 
+// Stream controls
+func (c Conn) Stream() Streamer {
+	return Streamer{
+		e:        c.Endpoint(),
+		Streamer: c.Conn.Stream(),
+	}
+}
+
 // Endpoint provides address information
 func (c Conn) Endpoint() Edge {
 	ep := c.Conn.Endpoint()
@@ -96,18 +104,18 @@ type Streamer struct {
 	pipe.Streamer
 }
 
-func (s Streamer) mkStream(ps func() (pipe.Stream, error)) (Stream, error) {
+func (s Streamer) mkStream(ps func() (pipe.Stream, error)) (*Stream, error) {
 	strm, err := ps()
-	return Stream{e: s.e, Stream: strm}, err
+	return &Stream{e: s.e, Stream: strm}, err
 }
 
 // Accept stream
-func (s Streamer) Accept() (Stream, error) {
+func (s Streamer) Accept() (*Stream, error) {
 	return s.mkStream(s.Streamer.Accept)
 }
 
 // Open stream
-func (s Streamer) Open() (Stream, error) {
+func (s Streamer) Open() (*Stream, error) {
 	return s.mkStream(s.Streamer.Open)
 }
 
@@ -117,8 +125,22 @@ type Stream struct {
 	pipe.Stream
 }
 
+// WithContext returns a new Stream, bound to the specified context.  Many
+// applications assume Stream.Context() expires when the stream is closed, so
+// use with care.
+func (s Stream) WithContext(c context.Context) *Stream {
+	return &Stream{e: s.e, Stream: ctxOverride{c: c, Stream: s.Stream}}
+}
+
 // Endpoint provides address information
 func (s Stream) Endpoint() Edge { return s.e }
+
+type ctxOverride struct {
+	c context.Context
+	pipe.Stream
+}
+
+func (o ctxOverride) Context() context.Context { return o.c }
 
 // Handler responds to an incoming stream connection
 type Handler interface {
