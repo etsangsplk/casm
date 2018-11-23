@@ -3,7 +3,6 @@ package host
 import (
 	net "github.com/lthibault/casm/pkg/net"
 	log "github.com/lthibault/log/pkg"
-	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/lthibault/pipewerks/pkg/transport/inproc"
 	"github.com/pkg/errors"
 	"github.com/satori/uuid"
@@ -11,7 +10,7 @@ import (
 
 type cfg struct {
 	net.Addr
-	pipe.Transport
+	*net.Transport
 	log.Logger
 }
 
@@ -24,7 +23,7 @@ func (c *cfg) mkHost() *basicHost {
 	if c.Transport == nil {
 		switch c.Addr.Network() {
 		case "inproc":
-			c.Transport = inproc.New()
+			c.Transport = &net.Transport{Transport: inproc.New()}
 		default:
 			panic(errors.Errorf("invalid network %s", c.Addr.Network()))
 		}
@@ -38,8 +37,8 @@ func (c *cfg) mkHost() *basicHost {
 	bh.a = c.Addr
 	bh.t = c.Transport
 	bh.log = c.Logger
-	bh.mux = newMux()
-	bh.peers = &peerStore{m: make(map[net.PeerID]net.Conn)}
+	bh.mux = newMux(c.Logger.WithLocus("mux"))
+	bh.peers = &peerStore{m: make(map[net.PeerID]*net.Conn)}
 
 	return bh
 }
@@ -57,7 +56,7 @@ func OptListenAddr(addr net.Addr) Option {
 }
 
 // OptTransport sets the transport
-func OptTransport(t pipe.Transport) Option {
+func OptTransport(t *net.Transport) Option {
 	return func(c *cfg) (prev Option) {
 		c.Transport = t
 		return

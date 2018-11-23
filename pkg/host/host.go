@@ -1,19 +1,18 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"io"
 	"sync"
-	"unsafe"
 
 	"github.com/SentimensRG/ctx"
-	"github.com/SentimensRG/ctx/mergectx"
-
 	radix "github.com/armon/go-radix"
+
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
 	log "github.com/lthibault/log/pkg"
-	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/pkg/errors"
 )
 
@@ -27,7 +26,7 @@ type Network interface {
 type StreamManager interface {
 	Register(string, net.Handler)
 	Unregister(string)
-	Open(context.Context, casm.Addresser, string) (pipe.Stream, error)
+	Open(context.Context, casm.Addresser, string) (*net.Stream, error)
 }
 
 // Host is a logical machine in a compute cluster.  It acts both as a server and
@@ -46,7 +45,7 @@ type basicHost struct {
 	a     net.Addr
 	mux   *mux
 	peers *peerStore
-	t     pipe.Transport
+	t     *net.Transport
 }
 
 // New Host whose lifetime is bound to the context c.
@@ -97,13 +96,13 @@ func (bh *basicHost) ListenAndServe(c context.Context) error {
 	return nil
 }
 
-func (bh basicHost) startAccepting(l pipe.Listener) {
+func (bh basicHost) startAccepting(l net.Listener) {
 	bh.log.Debug("accepting connections")
 	listenLog := bh.log.WithLocus("listener")
 	listenCtx := log.Set(bh.c, listenLog)
 
 	var err error
-	var conn net.Conn
+	var conn *net.Conn
 
 	for range ctx.Tick(bh.c) {
 		if conn, err = l.Accept(listenCtx); err != nil {
@@ -121,21 +120,39 @@ func (bh basicHost) startAccepting(l pipe.Listener) {
 	}
 }
 
-func (bh basicHost) handle(conn net.Conn) {
+func (bh basicHost) handle(conn *net.Conn) {
 	defer bh.Disconnect(conn.Endpoint().Remote())
 
 	bh.log.Debug("accepting streams")
 
 	var err error
-	var s pipe.Stream
+	var s *net.Stream
 	for range ctx.Tick(ctx.Link(bh.c, conn.Context())) {
 		if s, err = conn.Stream().Accept(); err != nil {
 			bh.log.WithError(err).Warn("accept stream")
 			return
 		}
 
-		go bh.mux.Serve(s)
+		go bh.handleStream(s)
 	}
+}
+
+func (bh basicHost) handleStream(s *net.Stream) {
+	var hdrLen uint16
+	if err := binary.Read(s, binary.BigEndian, &hdrLen); err != nil {
+		bh.log.WithError(err).Warn("read stream header")
+	}
+
+	buf := new(bytes.Buffer)
+	if _, err := io.Copy(buf, io.LimitReader(s, int64(hdrLen))); err != nil {
+		bh.log.WithError(err).Warn("read stream path")
+	}
+
+	c := log.Set(s.Context(), bh.log.WithFields(log.F{
+		"locus": "handler",
+		"path":  buf.String(),
+	}))
+	bh.mux.Serve(buf.String(), s.WithContext(c))
 }
 
 /*
@@ -149,7 +166,7 @@ func (bh basicHost) Register(path string, h net.Handler) {
 
 func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
 
-func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s pipe.Stream, err error) {
+func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s *net.Stream, err error) {
 	log := bh.log.WithFields(log.F{
 		"remote_peer": a.Addr(),
 		"path":        path,
@@ -235,7 +252,7 @@ func (bh basicHost) Connect(c context.Context, a casm.Addresser) (err error) {
 	if !ok {
 		c = log.Set(c, l.WithLocus("transport"))
 
-		if conn, err = bh.t.Dial(c, a.Addr()); err != nil {
+		if conn, err = bh.t.Dial(c, bh.a.ID(), a.Addr()); err != nil {
 			bh.log.WithField("addr", a.Addr()).WithError(err).Debug("connect")
 			err = errors.Wrap(err, "transport")
 			return
@@ -258,10 +275,10 @@ func (bh basicHost) Disconnect(id casm.IDer) {
 
 type peerStore struct {
 	sync.RWMutex
-	m map[net.PeerID]net.Conn
+	m map[net.PeerID]*net.Conn
 }
 
-func (p *peerStore) Add(conn net.Conn) bool {
+func (p *peerStore) Add(conn *net.Conn) bool {
 	p.Lock()
 	defer p.Unlock()
 
@@ -273,14 +290,14 @@ func (p *peerStore) Add(conn net.Conn) bool {
 	return true
 }
 
-func (p *peerStore) Get(id casm.IDer) (c net.Conn, ok bool) {
+func (p *peerStore) Get(id casm.IDer) (c *net.Conn, ok bool) {
 	p.RLock()
 	c, ok = p.m[id.ID()]
 	p.RUnlock()
 	return
 }
 
-func (p *peerStore) Del(id casm.IDer) (conn net.Conn, ok bool) {
+func (p *peerStore) Del(id casm.IDer) (conn *net.Conn, ok bool) {
 	p.Lock()
 	conn, ok = p.m[id.ID()]
 	delete(p.m, id.ID())
@@ -288,66 +305,33 @@ func (p *peerStore) Del(id casm.IDer) (conn net.Conn, ok bool) {
 	return
 }
 
-type radixRouter radix.Tree
-
-func (r *radixRouter) Insert(path string, b bind) {
-	(*radix.Tree)(unsafe.Pointer(r)).Insert(path, b)
-}
-
-func (r *radixRouter) Delete(path string) (b bind, ok bool) {
-	var v interface{}
-	if v, ok = (*radix.Tree)(unsafe.Pointer(r)).Delete(path); ok {
-		b = v.(bind)
-	}
-	return
-}
-
-func (r *radixRouter) Serve(s pipe.Stream) {
-	h, ok := (*radix.Tree)(unsafe.Pointer(r)).Get(s.Path())
-	if !ok {
-		s.Close() // TODO:  implement Stream.CloseWithError ?
-	}
-
-	go h.(net.Handler).Serve(s)
-}
-
-type bind struct {
-	c context.Context
-	h net.Handler
-}
-
-func (b bind) Serve(s pipe.Stream) {
-	c := mergectx.Link(b.c, s.Context())
-	c = log.Set(c, log.Get(c).WithLocus("handler"))
-	b.h.Serve(net.Bind(c, s))
-}
-
 type mux struct {
 	lock sync.RWMutex
-	*radixRouter
+	log  log.Logger
+	r    *radix.Tree
 }
 
-func newMux() *mux {
-	return &mux{radixRouter: (*radixRouter)(radix.New())}
-}
+func newMux(l log.Logger) *mux { return &mux{log: l, r: radix.New()} }
 
 func (m *mux) Register(c context.Context, path string, h net.Handler) {
 	m.lock.Lock()
-	log.Get(c).WithField("path", path).Debug("registered")
-	m.Insert(path, bind{c: c, h: h})
+	m.log.WithField("path", path).Debug("registered")
+	m.r.Insert(path, h)
 	m.lock.Unlock()
 }
 
 func (m *mux) Unregister(path string) {
 	m.lock.Lock()
-	if b, ok := m.Delete(path); ok {
-		log.Get(b.c).Debug("unregistered")
+	if b, ok := m.r.Delete(path); ok {
+		m.log.WithField("path", path).Debug("unregistered")
 	}
 	m.lock.Unlock()
 }
 
-func (m *mux) Serve(s pipe.Stream) {
+func (m *mux) Serve(path string, s net.Stream) {
 	m.lock.RLock()
-	m.radixRouter.Serve(s)
+	if v, ok := m.r.Get(path); ok {
+		go v.(net.Handler).Serve(s)
+	}
 	m.lock.RUnlock()
 }
