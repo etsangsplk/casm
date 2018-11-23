@@ -322,7 +322,7 @@ func (m *mux) Register(c context.Context, path string, h net.Handler) {
 
 func (m *mux) Unregister(path string) {
 	m.lock.Lock()
-	if b, ok := m.r.Delete(path); ok {
+	if _, ok := m.r.Delete(path); ok {
 		m.log.WithField("path", path).Debug("unregistered")
 	}
 	m.lock.Unlock()
