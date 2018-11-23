@@ -328,7 +328,7 @@ func (m *mux) Unregister(path string) {
 	m.lock.Unlock()
 }
 
-func (m *mux) Serve(path string, s net.Stream) {
+func (m *mux) Serve(path string, s *net.Stream) {
 	m.lock.RLock()
 	if v, ok := m.r.Get(path); ok {
 		go v.(net.Handler).Serve(s)
