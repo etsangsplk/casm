@@ -174,7 +174,7 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s *n
 
 	conn, ok := bh.peers.Get(a.Addr())
 	if !ok {
-		return nil, errors.Wrap(err, "peer not connected")
+		return nil, errors.New("peer not connected")
 	}
 
 	cherr0 := make(chan error)

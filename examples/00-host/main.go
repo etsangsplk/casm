@@ -16,8 +16,8 @@ var timeout = time.Second * 60
 func main() {
 	log := log.New(log.OptLevel(log.DebugLevel))
 
-	h0 := host.New(host.OptLogger(log), host.OptListenAddr("localhost:9021"))
-	h0.Stream().Register("/echo", net.HandlerFunc(func(s net.Stream) {
+	h0 := host.New(host.OptLogger(log), host.OptListenAddr("/h0"))
+	h0.Stream().Register("/echo", net.HandlerFunc(func(s *net.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
 		b := make([]byte, 11)
@@ -38,7 +38,7 @@ func main() {
 		}
 	}))
 
-	h1 := host.New(host.OptLogger(log), host.OptListenAddr("localhost:9022"))
+	h1 := host.New(host.OptLogger(log), host.OptListenAddr("/h1"))
 
 	if err := h0.ListenAndServe(c); err != nil {
 		log.Fatal(err)

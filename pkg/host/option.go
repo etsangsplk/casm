@@ -34,7 +34,7 @@ func (c *cfg) mkHost() *basicHost {
 	}
 
 	bh := new(basicHost)
-	bh.a = c.Addr
+	bh.a = net.NewAddr(id, c.Addr.Network(), c.Addr.String())
 	bh.t = c.Transport
 	bh.log = c.Logger
 	bh.mux = newMux(c.Logger.WithLocus("mux"))
@@ -47,10 +47,12 @@ func (c *cfg) mkHost() *basicHost {
 type Option func(*cfg) Option
 
 // OptListenAddr sets the listen address
-func OptListenAddr(addr net.Addr) Option {
+func OptListenAddr(addr string) Option {
 	return func(c *cfg) (prev Option) {
-		prev = OptListenAddr(c.Addr)
-		c.Addr = addr
+		if c.Addr != nil {
+			prev = OptListenAddr(c.Addr.String())
+		}
+		c.Addr = net.NewAddr(0, "inproc", addr)
 		return
 	}
 }
