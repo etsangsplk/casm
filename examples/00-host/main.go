@@ -40,11 +40,11 @@ func main() {
 
 	h1 := host.New(host.OptLogger(log), host.OptListenAddr("/h1"))
 
-	if err := h0.ListenAndServe(c); err != nil {
+	if err := h0.Start(c); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := h1.ListenAndServe(c); err != nil {
+	if err := h1.Start(c); err != nil {
 		log.Fatal(err)
 	}
 

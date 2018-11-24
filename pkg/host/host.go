@@ -36,7 +36,7 @@ type Host interface {
 	Addr() net.Addr
 	Network() Network
 	Stream() StreamManager
-	ListenAndServe(c context.Context) error
+	Start(c context.Context) error
 }
 
 type basicHost struct {
@@ -76,7 +76,7 @@ func (bh basicHost) Context() context.Context {
 	return bh.c
 }
 
-func (bh *basicHost) ListenAndServe(c context.Context) error {
+func (bh *basicHost) Start(c context.Context) error {
 	bh.log = bh.log.WithFields(log.F{
 		"id":         bh.a.ID(),
 		"local_peer": bh.a,
@@ -112,6 +112,7 @@ func (bh basicHost) startAccepting(l net.Listener) {
 
 		if !bh.peers.Add(conn) {
 			bh.log.Error("peer already connected")
+			conn.Close()
 			return
 		}
 
