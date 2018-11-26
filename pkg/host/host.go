@@ -97,13 +97,13 @@ func (bh *basicHost) Start(c context.Context) error {
 }
 
 func (bh basicHost) startAccepting(l net.Listener) {
-	bh.log.Debug("accepting connections")
 	listenLog := bh.log.WithLocus("listener")
 	listenCtx := log.Set(bh.c, listenLog)
 
 	var err error
 	var conn *net.Conn
 
+	bh.log.Debug("listening")
 	for range ctx.Tick(bh.c) {
 		if conn, err = l.Accept(listenCtx); err != nil {
 			bh.log.WithError(err).Warn("accept conn")
@@ -116,15 +116,15 @@ func (bh basicHost) startAccepting(l net.Listener) {
 			return
 		}
 
-		bh.log.Debug("handling connection") // TODO:  add fields identifying the conn
-		go bh.handle(conn)
+		l := bh.log.WithField("remote_peer", conn.Endpoint().Remote())
+		l.Debug("handling connection")
+
+		go bh.handle(conn.WithContext(log.Set(conn.Context(), l)))
 	}
 }
 
 func (bh basicHost) handle(conn *net.Conn) {
 	defer bh.Disconnect(conn.Endpoint().Remote())
-
-	bh.log.Debug("accepting streams")
 
 	var err error
 	var s *net.Stream
@@ -134,6 +134,7 @@ func (bh basicHost) handle(conn *net.Conn) {
 			return
 		}
 
+		bh.log.WithField("remote_peer", conn.Endpoint().Remote()).Debug("connected")
 		go bh.handleStream(s)
 	}
 }
@@ -242,29 +243,24 @@ func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s *n
 	Implement Network
 */
 
-func (bh basicHost) Connect(c context.Context, a casm.Addresser) (err error) {
-	l := bh.log.WithField("remote_peer", a.Addr())
-	l.Debug("connecting")
-	defer l.IfNoErr(func(l log.Logger) {
-		l.Debug("connected")
-	}).Eval(err)
+func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 
-	conn, ok := bh.peers.Get(a.Addr())
-	if !ok {
-		c = log.Set(c, l.WithLocus("transport"))
-
-		if conn, err = bh.t.Dial(c, bh.a.ID(), a.Addr()); err != nil {
-			bh.log.WithField("addr", a.Addr()).WithError(err).Debug("connect")
-			err = errors.Wrap(err, "transport")
-			return
-		}
+	if _, connected := bh.peers.Get(a.Addr()); connected {
+		return errors.Errorf("%s already connected", a.Addr().ID())
 	}
 
-	if ok || !bh.peers.Add(conn) {
+	conn, err := bh.t.Dial(c, bh.a.ID(), a.Addr())
+	if err != nil {
+		return errors.Wrap(err, "transport")
+	}
+
+	if !bh.peers.Add(conn) {
+		conn.Close()
 		err = errors.New("peer already connected")
 	}
 
-	return
+	bh.log.WithField("remote_peer", conn.Endpoint().Remote()).Debug("connected")
+	return nil
 }
 
 func (bh basicHost) Disconnect(id casm.IDer) {

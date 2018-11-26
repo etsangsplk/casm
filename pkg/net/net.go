@@ -44,7 +44,8 @@ type Listener struct {
 
 // Addr is the local listen address
 func (l Listener) Addr() Addr {
-	return NewAddr(l.PeerID, l.Addr().Network(), l.Addr().String())
+	a := l.Listener.Addr()
+	return NewAddr(l.PeerID, a.Network(), a.String())
 }
 
 // Accept the next incoming connection
@@ -89,6 +90,24 @@ func (c Conn) Endpoint() Edge {
 	}
 }
 
+// WithContext returns a new Stream, bound to the specified context.  Many
+// applications assume Stream.Context() expires when the stream is closed, so
+// use with care.
+func (c Conn) WithContext(cx context.Context) *Conn {
+	return &Conn{
+		localID:  c.localID,
+		remoteID: c.remoteID,
+		Conn:     connCtxOverride{c: cx, Conn: c.Conn},
+	}
+}
+
+type connCtxOverride struct {
+	c context.Context
+	pipe.Conn
+}
+
+func (o connCtxOverride) Context() context.Context { return o.c }
+
 // Edge provides the endpoints of a connection
 type Edge struct{ local, remote Addr }
 
@@ -129,18 +148,18 @@ type Stream struct {
 // applications assume Stream.Context() expires when the stream is closed, so
 // use with care.
 func (s Stream) WithContext(c context.Context) *Stream {
-	return &Stream{e: s.e, Stream: ctxOverride{c: c, Stream: s.Stream}}
+	return &Stream{e: s.e, Stream: streamCtxOverride{c: c, Stream: s.Stream}}
 }
 
 // Endpoint provides address information
 func (s Stream) Endpoint() Edge { return s.e }
 
-type ctxOverride struct {
+type streamCtxOverride struct {
 	c context.Context
 	pipe.Stream
 }
 
-func (o ctxOverride) Context() context.Context { return o.c }
+func (o streamCtxOverride) Context() context.Context { return o.c }
 
 // Handler responds to an incoming stream connection
 type Handler interface {

@@ -23,7 +23,9 @@ func (c *cfg) mkHost() *basicHost {
 	if c.Transport == nil {
 		switch c.Addr.Network() {
 		case "inproc":
-			c.Transport = &net.Transport{Transport: inproc.New()}
+			c.Transport = &net.Transport{
+				Transport: inproc.New(inproc.OptDialback(c.Addr)),
+			}
 		default:
 			panic(errors.Errorf("invalid network %s", c.Addr.Network()))
 		}

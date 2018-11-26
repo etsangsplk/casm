@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/lthibault/casm/pkg/host"
@@ -56,25 +55,27 @@ func main() {
 		log.Fatal(err)
 	}
 
-	streamCtx, cancel := context.WithTimeout(c, timeout)
+	<-time.After(time.Second * 5)
 
-	// Open a stream
-	c, cancel := context.WithTimeout(streamCtx, time.Second)
-	defer cancel()
+	// streamCtx, cancel := context.WithTimeout(c, timeout)
 
-	s, err := h1.Stream().Open(c, h0, "/echo")
-	if err != nil {
-		log.Fatal(err)
-	}
+	// // Open a stream
+	// c, cancel := context.WithTimeout(streamCtx, time.Second)
+	// defer cancel()
 
-	if _, err = s.Write([]byte("hello world")); err != nil {
-		log.Fatal(err)
-	}
+	// s, err := h1.Stream().Open(c, h0, "/echo")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	b := make([]byte, 11)
-	if _, err = s.Read(b); err != nil {
-		log.Fatal(err)
-	}
+	// if _, err = s.Write([]byte("hello world")); err != nil {
+	// 	log.Fatal(err)
+	// }
 
-	fmt.Println(string(b))
+	// b := make([]byte, 11)
+	// if _, err = s.Read(b); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// fmt.Println(string(b))
 }
