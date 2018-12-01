@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
-	"sync"
 
 	"github.com/SentimensRG/ctx"
-	radix "github.com/armon/go-radix"
 
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
@@ -26,7 +24,7 @@ type Network interface {
 type StreamManager interface {
 	Register(string, net.Handler)
 	Unregister(string)
-	Open(context.Context, casm.Addresser, string) (*net.Stream, error)
+	Open(casm.Addresser, string) (*net.Stream, error)
 }
 
 // Host is a logical machine in a compute cluster.  It acts both as a server and
@@ -43,19 +41,19 @@ type basicHost struct {
 	log   log.Logger
 	c     context.Context
 	a     net.Addr
-	mux   *mux
+	mux   *streamMux
 	peers *peerStore
-	t     *net.Transport
+	t     net.Transport
 }
 
 // New Host whose lifetime is bound to the context c.
 func New(opt ...Option) Host {
-	cfg := new(cfg)
+	c := cfg{}
 	for _, fn := range opt {
-		fn(cfg)
+		fn(&c)
 	}
 
-	return cfg.mkHost()
+	return mkHost(c)
 }
 
 func (bh basicHost) Addr() net.Addr { return bh.a }
@@ -97,15 +95,12 @@ func (bh *basicHost) Start(c context.Context) error {
 }
 
 func (bh basicHost) startAccepting(l net.Listener) {
-	listenLog := bh.log.WithLocus("listener")
-	listenCtx := log.Set(bh.c, listenLog)
-
 	var err error
 	var conn *net.Conn
 
 	bh.log.Debug("listening")
 	for range ctx.Tick(bh.c) {
-		if conn, err = l.Accept(listenCtx); err != nil {
+		if conn, err = l.Accept(); err != nil {
 			bh.log.WithError(err).Warn("accept conn")
 			return
 		}
@@ -116,7 +111,7 @@ func (bh basicHost) startAccepting(l net.Listener) {
 			return
 		}
 
-		l := bh.log.WithField("remote_peer", conn.Endpoint().Remote())
+		l := bh.log.WithField("remote_peer", conn.RemoteAddr())
 		l.Debug("handling connection")
 
 		go bh.handle(conn.WithContext(log.Set(conn.Context(), l)))
@@ -124,17 +119,21 @@ func (bh basicHost) startAccepting(l net.Listener) {
 }
 
 func (bh basicHost) handle(conn *net.Conn) {
-	defer bh.Disconnect(conn.Endpoint().Remote())
+	defer bh.Disconnect(conn.RemoteAddr())
 
 	var err error
 	var s *net.Stream
 	for range ctx.Tick(ctx.Link(bh.c, conn.Context())) {
-		if s, err = conn.Stream().Accept(); err != nil {
+		if s, err = conn.AcceptStream(); err != nil {
 			bh.log.WithError(err).Warn("accept stream")
 			return
 		}
 
-		bh.log.WithField("remote_peer", conn.Endpoint().Remote()).Debug("connected")
+		bh.log.WithFields(log.F{
+			"remote_peer": s.RemoteAddr(),
+			"stream":      s.StreamID(),
+		}).Debug("handling stream")
+
 		go bh.handleStream(s)
 	}
 }
@@ -143,11 +142,13 @@ func (bh basicHost) handleStream(s *net.Stream) {
 	var hdrLen uint16
 	if err := binary.Read(s, binary.BigEndian, &hdrLen); err != nil {
 		bh.log.WithError(err).Warn("read stream header")
+		return
 	}
 
 	buf := new(bytes.Buffer)
 	if _, err := io.Copy(buf, io.LimitReader(s, int64(hdrLen))); err != nil {
 		bh.log.WithError(err).Warn("read stream path")
+		return
 	}
 
 	c := log.Set(s.Context(), bh.log.WithFields(log.F{
@@ -168,75 +169,28 @@ func (bh basicHost) Register(path string, h net.Handler) {
 
 func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
 
-func (bh basicHost) Open(c context.Context, a casm.Addresser, path string) (s *net.Stream, err error) {
-	log := bh.log.WithFields(log.F{
-		"remote_peer": a.Addr(),
-		"path":        path,
-	})
-
+func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
 	conn, ok := bh.peers.Get(a.Addr())
 	if !ok {
 		return nil, errors.New("peer not connected")
 	}
 
-	cherr0 := make(chan error)
-	cherr1 := make(chan error)
-
-	go func() {
-		ch := make(chan error, 1)
-		go func() {
-			var e error
-			if s, e = conn.Stream().Open(); e != nil {
-				e = errors.Wrap(e, "open stream")
-			}
-			ch <- e
-		}()
-
-		select {
-		case <-c.Done():
-		case e := <-ch:
-			select {
-			case <-c.Done():
-			case cherr0 <- e:
-			}
-		}
-	}()
-
-	go func() {
-		ch := make(chan error, 1)
-
-		select {
-		case <-c.Done():
-		case e := <-cherr0:
-			if e == nil {
-				go func() {
-					if e = binary.Write(s, binary.BigEndian, path); e != nil {
-						log.WithError(e).Warn("write path")
-						e = errors.Wrap(e, "write path")
-						s.Close() // TODO:  CloseWithError
-					}
-					ch <- e
-				}()
-			}
-
-			select {
-			case <-c.Done():
-			case e := <-ch:
-				select {
-				case <-c.Done():
-				case cherr1 <- e:
-				}
-			}
-		}
-	}()
-
-	select {
-	case <-c.Done():
-		err = c.Err()
-	case err = <-cherr1:
+	s, err := conn.OpenStream()
+	if err != nil {
+		return nil, errors.Wrap(err, "open stream")
 	}
 
-	return
+	var hdr = uint16(len(path))
+	if err = binary.Write(s, binary.BigEndian, hdr); err != nil {
+		return nil, errors.Wrap(err, "write header")
+	}
+
+	if err = binary.Write(s, binary.BigEndian, []byte(path)); err != nil {
+		return nil, errors.Wrap(err, "write path")
+	}
+
+	c := log.Set(s.Context(), bh.log.WithField("path", path))
+	return s.WithContext(c), nil
 }
 
 /*
@@ -249,86 +203,22 @@ func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 		return errors.Errorf("%s already connected", a.Addr().ID())
 	}
 
-	conn, err := bh.t.Dial(c, bh.a.ID(), a.Addr())
+	conn, err := bh.t.Dial(c, a.Addr())
 	if err != nil {
 		return errors.Wrap(err, "transport")
 	}
 
 	if !bh.peers.Add(conn) {
 		conn.Close()
-		err = errors.New("peer already connected")
+		return errors.New("peer already connected")
 	}
 
-	bh.log.WithField("remote_peer", conn.Endpoint().Remote()).Debug("connected")
+	bh.log.WithField("remote_peer", conn.RemoteAddr()).Debug("connected")
 	return nil
 }
 
 func (bh basicHost) Disconnect(id casm.IDer) {
 	if conn, ok := bh.peers.Del(id.ID()); ok {
-		// TODO: log error
 		conn.Close()
 	}
-}
-
-type peerStore struct {
-	sync.RWMutex
-	m map[net.PeerID]*net.Conn
-}
-
-func (p *peerStore) Add(conn *net.Conn) bool {
-	p.Lock()
-	defer p.Unlock()
-
-	id := conn.Endpoint().Remote().ID()
-	if _, ok := p.m[id]; ok {
-		return false
-	}
-	p.m[id] = conn
-	return true
-}
-
-func (p *peerStore) Get(id casm.IDer) (c *net.Conn, ok bool) {
-	p.RLock()
-	c, ok = p.m[id.ID()]
-	p.RUnlock()
-	return
-}
-
-func (p *peerStore) Del(id casm.IDer) (conn *net.Conn, ok bool) {
-	p.Lock()
-	conn, ok = p.m[id.ID()]
-	delete(p.m, id.ID())
-	p.Unlock()
-	return
-}
-
-type mux struct {
-	lock sync.RWMutex
-	log  log.Logger
-	r    *radix.Tree
-}
-
-func newMux(l log.Logger) *mux { return &mux{log: l, r: radix.New()} }
-
-func (m *mux) Register(c context.Context, path string, h net.Handler) {
-	m.lock.Lock()
-	m.log.WithField("path", path).Debug("registered")
-	m.r.Insert(path, h)
-	m.lock.Unlock()
-}
-
-func (m *mux) Unregister(path string) {
-	m.lock.Lock()
-	if _, ok := m.r.Delete(path); ok {
-		m.log.WithField("path", path).Debug("unregistered")
-	}
-	m.lock.Unlock()
-}
-
-func (m *mux) Serve(path string, s *net.Stream) {
-	m.lock.RLock()
-	if v, ok := m.r.Get(path); ok {
-		go v.(net.Handler).Serve(s)
-	}
-	m.lock.RUnlock()
 }
