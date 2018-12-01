@@ -65,20 +65,19 @@ type pipeWrapper struct {
 // Transport Dial/Listen functions.
 type connAdapter struct{ generic.MuxConfig }
 
-func (a connAdapter) AdaptServer(conn net.Conn) (pipe.Conn, error) {
+func (a connAdapter) adapt(f func(net.Conn) (pipe.Conn, error), conn net.Conn) (pipe.Conn, error) {
 	id := conn.(netWrapper)
-	pc, err := a.MuxConfig.AdaptServer(conn)
+	pc, err := f(conn)
 	return pipeWrapper{
 		Conn:   pc,
 		idPair: id.idPair,
 	}, err
 }
 
+func (a connAdapter) AdaptServer(conn net.Conn) (pipe.Conn, error) {
+	return a.adapt(a.MuxConfig.AdaptServer, conn)
+}
+
 func (a connAdapter) AdaptClient(conn net.Conn) (pipe.Conn, error) {
-	id := conn.(netWrapper)
-	pc, err := a.MuxConfig.AdaptClient(conn)
-	return pipeWrapper{
-		Conn:   pc,
-		idPair: id.idPair,
-	}, err
+	return a.adapt(a.MuxConfig.AdaptClient, conn)
 }
