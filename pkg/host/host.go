@@ -46,7 +46,7 @@ type basicHost struct {
 	t     net.Transport
 }
 
-// New Host whose lifetime is bound to the context c.
+// New Host.  Pass options to override defaults.
 func New(opt ...Option) Host {
 	c := cfg{}
 	for _, fn := range opt {
