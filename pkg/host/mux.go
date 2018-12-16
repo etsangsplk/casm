@@ -21,7 +21,7 @@ func newStreamMux(l log.Logger) *streamMux {
 
 func (m *streamMux) Register(c context.Context, path string, h net.Handler) {
 	m.lock.Lock()
-	m.log.WithField("path", path).Debug("registered")
+	m.log.WithField("path", path).Debug("registered handler")
 	m.r.Insert(path, h)
 	m.lock.Unlock()
 }

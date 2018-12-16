@@ -79,7 +79,7 @@ func (bh *basicHost) Start(c context.Context) error {
 		"id":         bh.a.ID(),
 		"local_peer": bh.a,
 	})
-	bh.log.Info("starting host")
+
 	bh.c = log.Set(c, bh.log)
 	c = log.Set(c, bh.log.WithLocus("transport"))
 
@@ -91,6 +91,7 @@ func (bh *basicHost) Start(c context.Context) error {
 	ctx.Defer(bh.c, func() { l.Close() })
 	go bh.startAccepting(l)
 
+	bh.log.Info("started host")
 	return nil
 }
 
@@ -98,10 +99,9 @@ func (bh basicHost) startAccepting(l net.Listener) {
 	var err error
 	var conn *net.Conn
 
-	bh.log.Debug("listening")
 	for range ctx.Tick(bh.c) {
 		if conn, err = l.Accept(); err != nil {
-			bh.log.WithError(err).Warn("accept conn")
+			bh.log.WithError(err).Warn("failed to accept conn")
 			return
 		}
 
@@ -112,8 +112,8 @@ func (bh basicHost) startAccepting(l net.Listener) {
 		}
 
 		l := bh.log.WithField("remote_peer", conn.RemoteAddr())
-		l.Debug("handling connection")
 
+		l.Debug("connection accepted")
 		go bh.handle(conn.WithContext(log.Set(conn.Context(), l)))
 	}
 }
@@ -125,7 +125,7 @@ func (bh basicHost) handle(conn *net.Conn) {
 	var s *net.Stream
 	for range ctx.Tick(ctx.Link(bh.c, conn.Context())) {
 		if s, err = conn.AcceptStream(); err != nil {
-			bh.log.WithError(err).Warn("accept stream")
+			bh.log.WithError(err).Warn("failed to accept stream")
 			return
 		}
 
@@ -143,13 +143,13 @@ func (bh basicHost) handle(conn *net.Conn) {
 func (bh basicHost) handleStream(s *net.Stream) {
 	var hdrLen uint16
 	if err := binary.Read(s, binary.BigEndian, &hdrLen); err != nil {
-		bh.log.WithError(err).Warn("read stream header")
+		bh.log.WithError(err).Warn("failed to read stream header")
 		return
 	}
 
 	buf := new(bytes.Buffer)
 	if _, err := io.Copy(buf, io.LimitReader(s, int64(hdrLen))); err != nil {
-		bh.log.WithError(err).Warn("read stream path")
+		bh.log.WithError(err).Warn("failed to read stream path")
 		return
 	}
 
@@ -221,7 +221,7 @@ func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 		return errors.New("peer already connected")
 	}
 
-	bh.log.WithField("remote_peer", conn.RemoteAddr()).Debug("connected")
+	bh.log.WithField("remote_peer", conn.RemoteAddr()).Debug("connected to peer")
 	return nil
 }
 
