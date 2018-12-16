@@ -23,20 +23,24 @@ type Transport struct{ pipe.Transport }
 func NewTransport(a Addr) Transport {
 	var pt pipe.Transport
 	optMux := generic.OptMuxAdapter(connAdapter{})
+	optNeg := generic.OptConnectHandler(idNegotiator(a.ID()))
 
 	switch a.Network() {
 	case "inproc":
 		pt = inproc.New(
 			inproc.OptDialback(a),
 			inproc.OptGeneric(optMux),
+			inproc.OptGeneric(optNeg),
 		)
 	case "tcp":
-		pt = tcp.New(tcp.OptGeneric(optMux))
+		pt = tcp.New(
+			tcp.OptGeneric(optMux),
+			tcp.OptGeneric(optNeg),
+		)
 	default:
 		panic(errors.Errorf("invalid network %s", a.Network()))
 	}
 
-	pt.(generic.ConnectHandler).Set(idNegotiator(a.ID()))
 	return Transport{pt}
 }
 
