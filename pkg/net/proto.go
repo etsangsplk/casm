@@ -11,6 +11,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	handshakeTimeout = time.Second * 5
+)
+
 type idNegotiator PeerID
 
 func (n idNegotiator) Connected(conn net.Conn, _ generic.EndpointType) (net.Conn, error) {
