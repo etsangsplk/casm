@@ -59,19 +59,23 @@ func mkHost(c cfg) *basicHost {
 	bh := new(basicHost)
 	bh.a = laddr
 	bh.t = net.NewTransport(laddr)
-	bh.log = mkLogger(c, laddr.ID())
+	bh.log = mkLogger(c).WithFields(log.F{
+		"id":        laddr.ID(),
+		"locus":     "host",
+		"transport": laddr.Network(),
+	})
 	bh.mux = newStreamMux(bh.log.WithLocus("mux"))
 	bh.peers = newPeerStore()
 
 	return bh
 }
 
-func mkLogger(c cfg, id net.PeerID) log.Logger {
-	l := c.Logger
-	if l == nil {
-		l = log.New()
+func mkLogger(c cfg) log.Logger {
+	if l := c.Logger; l != nil {
+		return l
 	}
-	return l.WithFields(log.F{"id": id, "locus": "host"})
+
+	return log.New()
 }
 
 func (c cfg) ListenAddr(id net.PeerID) net.Addr {
