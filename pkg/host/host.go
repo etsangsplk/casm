@@ -129,12 +129,14 @@ func (bh basicHost) handle(conn *net.Conn) {
 			return
 		}
 
-		bh.log.WithFields(log.F{
+		l := bh.log.WithFields(log.F{
 			"remote_peer": s.RemoteAddr(),
 			"stream":      s.StreamID(),
-		}).Debug("handling stream")
+		})
+		l.Debug("handling stream")
 
-		go bh.handleStream(s)
+		c := log.Set(s.Context(), l)
+		go bh.handleStream(s.WithContext(c))
 	}
 }
 
@@ -180,6 +182,9 @@ func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
 		return nil, errors.Wrap(err, "open stream")
 	}
 
+	l := bh.log.WithField("stream", s.StreamID())
+	l.Debug("stream opened")
+
 	var hdr = uint16(len(path))
 	if err = binary.Write(s, binary.BigEndian, hdr); err != nil {
 		return nil, errors.Wrap(err, "write header")
@@ -189,7 +194,10 @@ func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
 		return nil, errors.Wrap(err, "write path")
 	}
 
-	c := log.Set(s.Context(), bh.log.WithField("path", path))
+	l = l.WithField("path", path)
+	l.Debug("header sent")
+
+	c := log.Set(s.Context(), l)
 	return s.WithContext(c), nil
 }
 

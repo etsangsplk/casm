@@ -7,6 +7,7 @@ import (
 	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/lthibault/pipewerks/pkg/transport/generic"
 	"github.com/lthibault/pipewerks/pkg/transport/inproc"
+	"github.com/lthibault/pipewerks/pkg/transport/tcp"
 	"github.com/pkg/errors"
 )
 
@@ -19,20 +20,23 @@ const (
 type Transport struct{ pipe.Transport }
 
 // NewTransport from a pipewerks Transport
-func NewTransport(id PeerID, a Addr) Transport {
+func NewTransport(a Addr) Transport {
 	var pt pipe.Transport
+	optMux := generic.OptMuxAdapter(connAdapter{})
 
 	switch a.Network() {
 	case "inproc":
 		pt = inproc.New(
 			inproc.OptDialback(a),
-			inproc.OptMuxAdapter(connAdapter{}),
+			inproc.OptGeneric(optMux),
 		)
+	case "tcp":
+		pt = tcp.New(tcp.OptGeneric(optMux))
 	default:
 		panic(errors.Errorf("invalid network %s", a.Network()))
 	}
 
-	pt.(generic.ConnectHandler).Set(idNegotiator(id))
+	pt.(generic.ConnectHandler).Set(idNegotiator(a.ID()))
 	return Transport{pt}
 }
 

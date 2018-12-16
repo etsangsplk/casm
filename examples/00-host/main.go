@@ -10,13 +10,18 @@ import (
 	log "github.com/lthibault/log/pkg"
 )
 
-var c = context.Background()
-var timeout = time.Second * 60
+var (
+	c       = context.Background()
+	timeout = time.Second * 60
+
+	addr0 = "tcp://localhost:9021"
+	addr1 = "tcp://localhost:9022"
+)
 
 func main() {
 	log := log.New(log.OptLevel(log.DebugLevel))
 
-	h0 := host.New(host.OptLogger(log), host.OptListenAddr("/h0"))
+	h0 := host.New(host.OptLogger(log), host.OptListenAddr(addr0))
 	h0.Stream().Register("/echo", net.HandlerFunc(func(s *net.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
@@ -38,7 +43,7 @@ func main() {
 		}
 	}))
 
-	h1 := host.New(host.OptLogger(log), host.OptListenAddr("/h1"))
+	h1 := host.New(host.OptLogger(log), host.OptListenAddr(addr1))
 
 	if err := h0.Start(c); err != nil {
 		log.Fatal(err)
@@ -66,9 +71,11 @@ func main() {
 	}
 
 	b := make([]byte, 11)
+	log.Warn("****")
 	if _, err = s.Read(b); err != nil {
 		log.Fatal(err)
 	}
+	log.Warn("----")
 
 	fmt.Println(string(b))
 }

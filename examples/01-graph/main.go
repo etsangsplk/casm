@@ -32,7 +32,7 @@ var (
 
 func newVertex(l string) (v graph.Vertex, err error) {
 	var h casm.Host
-	if h, err = casm.New(c, casm.OptListenAddrStrings(l)); err != nil {
+	if h, err = casm.New(c, casm.OptListenAddrs(l)); err != nil {
 		err = errors.Wrap(err, "create host")
 	} else if v, err = graph.New(h, graph.OptCardinality(k)); err != nil {
 		err = errors.Wrap(err, "create vertex")
