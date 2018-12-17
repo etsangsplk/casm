@@ -12,13 +12,10 @@ type Conn struct {
 	pipe.Conn
 }
 
-func mkConn(id idPair, conn pipe.Conn) *Conn {
-	local := conn.LocalAddr()
-	remote := conn.RemoteAddr()
-
+func mkConn(e edge, conn pipe.Conn) *Conn {
 	return &Conn{
-		local:  NewAddr(id.Local, local.Network(), local.String()),
-		remote: NewAddr(id.Remote, remote.Network(), remote.String()),
+		local:  e.Local,
+		remote: e.Remote,
 		Conn:   conn,
 	}
 }

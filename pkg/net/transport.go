@@ -18,7 +18,7 @@ type Transport struct{ pipe.Transport }
 func NewTransport(a Addr) Transport {
 	var pt pipe.Transport
 	optMux := generic.OptMuxAdapter(connAdapter{})
-	optNeg := generic.OptConnectHandler(idNegotiator(a.ID()))
+	optNeg := generic.OptConnectHandler(handshakeProtocol{a})
 
 	switch a.Network() {
 	case "inproc":
@@ -58,7 +58,7 @@ func (t Transport) Dial(c context.Context, a Addr) (*Conn, error) {
 		return nil, errors.Wrap(err, "transport")
 	}
 
-	return mkConn(conn.(pipeWrapper).idPair, conn), nil
+	return mkConn(conn.(pipeWrapper).edge, conn), nil
 }
 
 // Listener can listen for incoming connections
@@ -77,5 +77,5 @@ func (l Listener) Accept() (*Conn, error) {
 		return nil, errors.Wrap(err, "accept")
 	}
 
-	return mkConn(conn.(pipeWrapper).idPair, conn), nil
+	return mkConn(conn.(pipeWrapper).edge, conn), nil
 }

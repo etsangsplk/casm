@@ -14,8 +14,8 @@ var (
 	c       = context.Background()
 	timeout = time.Second * 60
 
-	addr0 = "tcp://localhost:9021"
-	addr1 = "tcp://localhost:9022"
+	addr0 = "inproc://127.0.0.1:9021"
+	addr1 = "inproc://127.0.0.1:9022"
 )
 
 func main() {
