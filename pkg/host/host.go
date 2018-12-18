@@ -1,10 +1,7 @@
 package host
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
-	"io"
 
 	"github.com/SentimensRG/ctx"
 
@@ -23,8 +20,8 @@ type Network interface {
 // StreamManager manages streams, which are multiplexed on top of raw connections
 type StreamManager interface {
 	Register(string, net.Handler)
-	Unregister(string)
-	Open(casm.Addresser, string) (*net.Stream, error)
+	Unregister(net.Path)
+	Open(casm.Addresser, net.Path) (*net.Stream, error)
 }
 
 // Host is a logical machine in a compute cluster.  It acts both as a server and
@@ -141,23 +138,16 @@ func (bh basicHost) handle(conn *net.Conn) {
 }
 
 func (bh basicHost) handleStream(s *net.Stream) {
-	var hdrLen uint16
-	if err := binary.Read(s, binary.BigEndian, &hdrLen); err != nil {
-		bh.log.WithError(err).Warn("failed to read stream header")
+	var p net.Path
+	if _, err := p.ReadFrom(s); err != nil {
+		bh.log.WithError(err).Error("failed to read stream path")
 		return
 	}
 
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, io.LimitReader(s, int64(hdrLen))); err != nil {
-		bh.log.WithError(err).Warn("failed to read stream path")
-		return
-	}
+	l := bh.log.WithFields(log.F{"locus": "handler", "path": p})
+	c := log.Set(s.Context(), l)
 
-	c := log.Set(s.Context(), bh.log.WithFields(log.F{
-		"locus": "handler",
-		"path":  buf.String(),
-	}))
-	bh.mux.Serve(buf.String(), s.WithContext(c))
+	bh.mux.Serve(p.String(), s.WithContext(c))
 }
 
 /*
@@ -169,9 +159,9 @@ func (bh basicHost) Register(path string, h net.Handler) {
 	bh.mux.Register(c, path, h)
 }
 
-func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
+func (bh basicHost) Unregister(p net.Path) { bh.mux.Unregister(p.String()) }
 
-func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
+func (bh basicHost) Open(a casm.Addresser, p net.Path) (*net.Stream, error) {
 	conn, ok := bh.peers.Get(a.Addr())
 	if !ok {
 		return nil, errors.New("peer not connected")
@@ -185,16 +175,11 @@ func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
 	l := bh.log.WithField("stream", s.StreamID())
 	l.Debug("stream opened")
 
-	var hdr = uint16(len(path))
-	if err = binary.Write(s, binary.BigEndian, hdr); err != nil {
-		return nil, errors.Wrap(err, "write header")
-	}
-
-	if err = binary.Write(s, binary.BigEndian, []byte(path)); err != nil {
+	if _, err = p.WriteTo(s); err != nil {
 		return nil, errors.Wrap(err, "write path")
 	}
 
-	l = l.WithField("path", path)
+	l = l.WithField("path", p)
 	l.Debug("header sent")
 
 	c := log.Set(s.Context(), l)

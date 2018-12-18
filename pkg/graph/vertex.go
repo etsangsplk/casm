@@ -6,6 +6,7 @@ import (
 	"time"
 
 	casm "github.com/lthibault/casm/pkg"
+	"github.com/lthibault/casm/pkg/host"
 	net "github.com/lthibault/casm/pkg/net"
 )
 
@@ -27,13 +28,13 @@ type Vertex interface {
 
 // vertex is a concrete Vertex
 type vertex struct {
-	h    casm.Host
+	h    host.Host
 	k, l uint8
 	b    *broadcast
 	en   *edgeNegotiator
 }
 
-func newVertex(h casm.Host) *vertex {
+func newVertex(h host.Host) *vertex {
 	return &vertex{
 		h:  h,
 		b:  newBroadcaster(h.Addr()),
@@ -55,7 +56,7 @@ func (v *vertex) configure(opt []Option) (err error) {
 }
 
 // New Vertex
-func New(h casm.Host, opt ...Option) (Vertex, error) {
+func New(h net.Host, opt ...Option) (Vertex, error) {
 	v := newVertex(h)
 	return v, v.configure(opt)
 }

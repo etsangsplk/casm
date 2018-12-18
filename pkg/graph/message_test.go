@@ -3,7 +3,7 @@ package graph
 import (
 	"testing"
 
-	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 	"github.com/stretchr/testify/assert"
 )
 

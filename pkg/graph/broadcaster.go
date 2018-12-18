@@ -10,6 +10,7 @@ import (
 	"github.com/lthibault/portal"
 
 	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 )
 
 // compile-time type constraints
@@ -53,7 +54,7 @@ type edgeFrame struct {
 func (f edgeFrame) Context() context.Context { return f.c }
 func (f *edgeFrame) Free()                   { fp.Put(f) }
 
-type edgeSet map[casm.PeerID]*edgeFrame
+type edgeSet map[net.PeerID]*edgeFrame
 
 func (es edgeSet) Add(f *edgeFrame) { es[f.RemotePeer()] = f }
 func (es edgeSet) Get(id casm.IDer) (f *edgeFrame, ok bool) {

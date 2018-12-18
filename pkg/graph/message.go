@@ -8,6 +8,7 @@ import (
 
 	"github.com/lthibault/casm/api/graph"
 	casm "github.com/lthibault/casm/pkg"
+	net "github.com/lthibault/casm/pkg/net"
 	capnp "zombiezen.com/go/capnproto2"
 )
 
@@ -58,10 +59,10 @@ type message struct {
 }
 
 // ID of the sender
-func (m message) ID() casm.PeerID { return casm.PeerID(m.m.Id()) }
+func (m message) ID() net.PeerID { return net.PeerID(m.m.Id()) }
 
 // Sequence number of the message
-func (m message) Sequence() uint64 { return uint64(m.m.Seq()) }
+func (m message) Sequence() uint64 { return m.m.Seq() }
 
 // Header uniquely idenitifies a message
 func (m message) Header() []byte {
@@ -97,7 +98,7 @@ func (m *message) ReadFrom(r io.Reader) (int64, error) {
 
 type messageFactory func([]byte) *message
 
-func newMsgFactory(pid casm.PeerID) func([]byte) *message {
+func newMsgFactory(pid net.PeerID) func([]byte) *message {
 	var seq uint64
 	return func(b []byte) (msg *message) {
 		msg = msgPool.Get()

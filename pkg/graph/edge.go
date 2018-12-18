@@ -28,7 +28,7 @@ type EdgeAPI interface {
 type Edge interface {
 	io.Closer
 	Context() context.Context
-	RemotePeer() casm.PeerID
+	RemotePeer() net.PeerID
 	Pipe() Pipe
 	API() EdgeAPI
 }
@@ -120,7 +120,7 @@ func newEdge(g streamGroup) *edge {
 func (e edge) Context() context.Context { panic("function NOT IMPLEMENTED") }
 func (e *edge) Pipe() Pipe              { panic("function NOT IMPLEMENTED") }
 func (e *edge) API() EdgeAPI            { panic("function NOT IMPLEMENTED") }
-func (e edge) RemotePeer() casm.PeerID  { panic("function NOT IMPLEMENTED") }
+func (e edge) RemotePeer() net.PeerID   { panic("function NOT IMPLEMENTED") }
 
 func (e edge) Close() error {
 	panic("function NOT IMPLEMENTED")
@@ -134,11 +134,11 @@ func (e edge) SetWriteDeadline(t time.Time) error { panic("function NOT IMPLEMEN
 
 type edgeNegotiator struct {
 	sync.Mutex
-	m map[casm.PeerID]chan net.Stream
+	m map[net.PeerID]chan net.Stream
 }
 
 func newEdgeNegotiator() *edgeNegotiator {
-	return &edgeNegotiator{m: make(map[casm.PeerID]chan net.Stream)}
+	return &edgeNegotiator{m: make(map[net.PeerID]chan net.Stream)}
 }
 
 func (n *edgeNegotiator) Clear(id casm.IDer) {
@@ -150,7 +150,7 @@ func (n *edgeNegotiator) Clear(id casm.IDer) {
 	n.Unlock()
 }
 
-func (n *edgeNegotiator) maybeInitUnsafe(id casm.PeerID) (ch chan net.Stream) {
+func (n *edgeNegotiator) maybeInitUnsafe(id net.PeerID) (ch chan net.Stream) {
 	var ok bool
 	if ch, ok = n.m[id]; !ok {
 		ch = make(chan net.Stream)
