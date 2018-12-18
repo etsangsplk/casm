@@ -23,7 +23,6 @@ func NewTransport(a Addr) Transport {
 	switch a.Network() {
 	case "inproc":
 		pt = inproc.New(
-			inproc.OptDialback(a),
 			inproc.OptGeneric(optMux),
 			inproc.OptGeneric(optNeg),
 		)
