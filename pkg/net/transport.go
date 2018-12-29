@@ -4,54 +4,63 @@ import (
 	"context"
 
 	pipe "github.com/lthibault/pipewerks/pkg"
-	"github.com/lthibault/pipewerks/pkg/transport/generic"
-	"github.com/lthibault/pipewerks/pkg/transport/inproc"
-	"github.com/lthibault/pipewerks/pkg/transport/tcp"
 	"github.com/pkg/errors"
 )
 
 // Transport is a means by which to connect to an listen for connections from
 // other peers.
-type Transport struct{ pipe.Transport }
-
-// NewTransport from a pipewerks Transport
-func NewTransport(a Addr) Transport {
-	var pt pipe.Transport
-	optMux := generic.OptMuxAdapter(connAdapter{})
-	optNeg := generic.OptConnectHandler(handshakeProtocol{a})
-
-	switch a.Network() {
-	case "inproc":
-		pt = inproc.New(
-			inproc.OptGeneric(optMux),
-			inproc.OptGeneric(optNeg),
-		)
-	case "tcp":
-		pt = tcp.New(
-			tcp.OptGeneric(optMux),
-			tcp.OptGeneric(optNeg),
-		)
-	default:
-		panic(errors.Errorf("invalid network %s", a.Network()))
-	}
-
-	return Transport{pt}
+type Transport interface {
+	Addr() Addr
+	Listen(context.Context) (Listener, error)
+	Dial(context.Context, Addr) (*Conn, error)
 }
 
+// TransportFactory initializes a net.Transport.  Listeneres produced by said
+// Transport will bind to the specified address, and Dialers will transmit this
+// same address as a dialback point.
+type TransportFactory interface {
+	NewTransport(Addr) (Transport, error)
+}
+
+// TransportFactoryFunc wraps an address in order to satisfy TransportFactory.
+type TransportFactoryFunc func(Addr) (Transport, error)
+
+// NewTransport satisfies TransportFactory
+func (f TransportFactoryFunc) NewTransport(a Addr) (Transport, error) {
+	return f(a)
+}
+
+// NewFactory builds a TransportFactory from a pipe.Transport
+func NewFactory(t pipe.Transport) TransportFactory {
+	return TransportFactoryFunc(func(a Addr) (Transport, error) {
+		return pipeTransport{
+			listen:    a,
+			Transport: t,
+		}, nil
+	})
+}
+
+type pipeTransport struct {
+	listen Addr
+	pipe.Transport
+}
+
+func (t pipeTransport) Addr() Addr { return t.listen }
+
 // Listen for connections
-func (t Transport) Listen(c context.Context, a Addr) (Listener, error) {
-	l, err := t.Transport.Listen(c, a)
+func (t pipeTransport) Listen(c context.Context) (Listener, error) {
+	l, err := t.Transport.Listen(c, t.listen)
 	if err != nil {
 		return Listener{}, err
 	}
 
 	// use the listener's address, because of address resolution. (e.g. ":80")
-	a = NewAddr(a.ID(), l.Addr().Network(), l.Addr().String())
+	a := NewAddr(t.listen.ID(), l.Addr().Network(), l.Addr().String())
 	return Listener{addr: a, Listener: l}, nil
 }
 
 // Dial into a remote listener
-func (t Transport) Dial(c context.Context, a Addr) (*Conn, error) {
+func (t pipeTransport) Dial(c context.Context, a Addr) (*Conn, error) {
 	conn, err := t.Transport.Dial(c, a)
 	if err != nil {
 		return nil, errors.Wrap(err, "transport")

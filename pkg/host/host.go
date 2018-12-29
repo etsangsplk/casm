@@ -5,6 +5,7 @@ import (
 
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
+	"github.com/lthibault/pipewerks/pkg/transport/tcp"
 )
 
 // Network manages raw connections
@@ -27,15 +28,28 @@ type Host interface {
 	Addr() net.Addr
 	Network() Network
 	Stream() StreamManager
-	Start(c context.Context) error
+	ListenAndServe(context.Context, net.Addr) error
+}
+
+func setDefaultOpts(opt []Option) []Option {
+	return append(
+		[]Option{
+			OptTransport(net.NewFactory(tcp.New())),
+			OptLogger(nil),
+		},
+		opt...,
+	)
 }
 
 // New Host.  Pass options to override defaults.
 func New(opt ...Option) Host {
-	c := cfg{}
-	for _, fn := range opt {
-		fn(&c)
+	bh := new(basicHost)
+
+	for _, fn := range setDefaultOpts(opt) {
+		fn(bh)
 	}
 
-	return mkHost(c)
+	bh.mux = newStreamMux(bh.log().WithLocus("mux"))
+	bh.peers = newPeerStore()
+	return bh
 }
