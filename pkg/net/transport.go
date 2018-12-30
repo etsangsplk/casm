@@ -125,9 +125,6 @@ func (l Listener) Accept() (*Conn, error) {
 		return nil, errors.Wrap(err, "accept")
 	}
 
-	// Handshake
-	// 1. who called us?
-	// 2. send our PID so that he can confirm that he reached the right entity
 	a, err := l.u.UpgradeListener(conn, l.a)
 	if err != nil {
 		return nil, errors.Wrap(err, "upgrade")

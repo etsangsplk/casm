@@ -2,10 +2,14 @@ package net
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"net"
 	"testing"
 	"time"
+
+	pipe "github.com/lthibault/pipewerks/pkg"
+	"github.com/lthibault/pipewerks/pkg/transport/inproc"
 
 	"github.com/lunixbochs/struc"
 	"github.com/pkg/errors"
@@ -152,4 +156,54 @@ func TestProto(t *testing.T) {
 		assert.Equal(t, da.Proto(), a.Proto())
 		assert.Equal(t, da.String(), a.String())
 	})
+}
+
+func TestPipeConnUpgrader(t *testing.T) {
+	var u PipeConnUpgrader
+	it := inproc.New()
+
+	da := addr{
+		PeerID:  New(),
+		proto:   "inproc",
+		network: inprocType.String(),
+		addr:    "/test/alpha",
+	}
+
+	la := addr{
+		PeerID:  New(),
+		proto:   "inproc",
+		network: inprocType.String(),
+		addr:    "/test/bravo",
+	}
+
+	l, err := it.Listen(context.Background(), la)
+	assert.NoError(t, err)
+
+	ch := make(chan pipe.Conn)
+	go func() {
+		lc, err := l.Accept()
+		assert.NoError(t, err)
+		ch <- lc
+	}()
+
+	dc, err := it.Dial(context.Background(), la)
+	assert.NoError(t, err)
+
+	lc := <-ch
+
+	var a Addr
+	var g errgroup.Group
+	g.Go(func() error {
+		return u.UpgradeDialer(dc, da, la.ID())
+	})
+	g.Go(func() (err error) {
+		a, err = u.UpgradeListener(lc, la)
+		return
+	})
+	assert.NoError(t, g.Wait())
+
+	assert.Equal(t, da.ID(), a.ID())
+	assert.Equal(t, da.Network(), a.Network())
+	assert.Equal(t, da.Proto(), a.Proto())
+	assert.Equal(t, da.String(), a.String())
 }
