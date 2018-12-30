@@ -10,6 +10,7 @@ import (
 	"github.com/lunixbochs/struc"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/sync/errgroup"
 )
 
 type mockConn struct {
@@ -29,7 +30,7 @@ func TestProto(t *testing.T) {
 	t.Run("WithTimeout", func(t *testing.T) {
 		t.Run("NoError", func(t *testing.T) {
 			conn := &mockConn{}
-			err := proto.withTimeout(conn, func() error {
+			err := withTimeout(conn, func() error {
 				t1 := time.Now().Add(upgradeDeadline)
 				assert.WithinDuration(t, conn.t0, t1, time.Millisecond)
 				return nil
@@ -39,7 +40,7 @@ func TestProto(t *testing.T) {
 
 		t.Run("Error", func(t *testing.T) {
 			conn := &mockConn{err: errors.New("")}
-			err := proto.withTimeout(conn, func() error {
+			err := withTimeout(conn, func() error {
 				t1 := time.Now().Add(upgradeDeadline)
 				assert.WithinDuration(t, conn.t0, t1, time.Microsecond)
 				return nil
@@ -52,14 +53,14 @@ func TestProto(t *testing.T) {
 		t.Run("Match", func(t *testing.T) {
 			defer buf.Reset()
 			binary.Write(buf, binary.BigEndian, PeerID(1))
-			fn := proto.checkRemoteID(buf, PeerID(1))
+			fn := checkRemoteID(buf, PeerID(1))
 			assert.NoError(t, fn())
 		})
 
 		t.Run("NoMatch", func(t *testing.T) {
 			defer buf.Reset()
 			binary.Write(buf, binary.BigEndian, PeerID(1))
-			fn := proto.checkRemoteID(buf, PeerID(9))
+			fn := checkRemoteID(buf, PeerID(9))
 			assert.Error(t, fn())
 		})
 	})
@@ -76,12 +77,79 @@ func TestProto(t *testing.T) {
 		assert.NoError(t, struc.Pack(buf, newWireAddr(a)))
 
 		wa := new(wireAddr)
-		fn := proto.recvDialback(buf, wa)
+		fn := recvDialback(buf, wa)
 		assert.NoError(t, fn())
 
 		assert.Equal(t, a.ID(), wa.ID())
 		assert.Equal(t, a.Network(), wa.Network())
 		assert.Equal(t, a.Proto(), wa.Proto())
 		assert.Equal(t, a.String(), wa.String())
+	})
+
+	t.Run("SendID", func(t *testing.T) {
+		defer buf.Reset()
+
+		fn := sendID(buf, PeerID(1))
+		assert.NoError(t, fn())
+
+		var pid PeerID
+		assert.NoError(t, binary.Read(buf, binary.BigEndian, &pid))
+		assert.Equal(t, PeerID(1), pid)
+	})
+
+	t.Run("SendDialback", func(t *testing.T) {
+		defer buf.Reset()
+
+		a := addr{
+			PeerID:  New(),
+			proto:   "inproc",
+			network: inprocType.String(),
+			addr:    "/test",
+		}
+
+		fn := sendDialback(buf, a)
+		assert.NoError(t, fn())
+
+		wa := new(wireAddr)
+		assert.NoError(t, struc.Unpack(buf, wa))
+
+		assert.Equal(t, a.ID(), wa.ID())
+		assert.Equal(t, a.Network(), wa.Network())
+		assert.Equal(t, a.Proto(), wa.Proto())
+		assert.Equal(t, a.String(), wa.String())
+	})
+
+	t.Run("Integration", func(t *testing.T) {
+		dc, lc := net.Pipe()
+
+		da := addr{
+			PeerID:  New(),
+			proto:   "inproc",
+			network: inprocType.String(),
+			addr:    "/test/alpha",
+		}
+
+		la := addr{
+			PeerID:  New(),
+			proto:   "inproc",
+			network: inprocType.String(),
+			addr:    "/test/bravo",
+		}
+
+		var a Addr
+		var g errgroup.Group
+		g.Go(func() error {
+			return proto.upgradeDialer(dc, da, la.ID())
+		})
+		g.Go(func() (err error) {
+			a, err = proto.upgradeListener(lc, la)
+			return err
+		})
+		assert.NoError(t, g.Wait())
+
+		assert.Equal(t, da.ID(), a.ID())
+		assert.Equal(t, da.Network(), a.Network())
+		assert.Equal(t, da.Proto(), a.Proto())
+		assert.Equal(t, da.String(), a.String())
 	})
 }

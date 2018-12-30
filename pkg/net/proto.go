@@ -79,7 +79,7 @@ var proto protocol
 
 type protocol struct{}
 
-func (protocol) withTimeout(conn net.Conn, fn func() error) error {
+func withTimeout(conn net.Conn, fn func() error) error {
 	err := conn.SetDeadline(time.Now().Add(upgradeDeadline))
 	if err != nil {
 		return errors.Wrap(err, "set deadline")
@@ -90,25 +90,25 @@ func (protocol) withTimeout(conn net.Conn, fn func() error) error {
 }
 
 func (p protocol) upgradeDialer(conn net.Conn, local Addr, remote PeerID) error {
-	return p.withTimeout(conn, func() error {
+	return withTimeout(conn, func() error {
 		var g errgroup.Group
-		g.Go(proto.checkRemoteID(conn, remote))
-		g.Go(proto.sendDialback(conn, local))
+		g.Go(checkRemoteID(conn, remote))
+		g.Go(sendDialback(conn, local))
 		return g.Wait()
 	})
 }
 
-func (p protocol) upgradeListener(conn net.Conn, local Addr) (Addr, error) {
+func (protocol) upgradeListener(conn net.Conn, local Addr) (Addr, error) {
 	a := new(wireAddr)
-	return a, p.withTimeout(conn, func() error {
+	return a, withTimeout(conn, func() error {
 		var g errgroup.Group
-		g.Go(proto.sendID(conn, local.ID()))
-		g.Go(proto.recvDialback(conn, a))
+		g.Go(sendID(conn, local.ID()))
+		g.Go(recvDialback(conn, a))
 		return g.Wait()
 	})
 }
 
-func (p protocol) checkRemoteID(r io.Reader, id PeerID) func() error {
+func checkRemoteID(r io.Reader, id PeerID) func() error {
 	var remote PeerID
 	return func() (err error) {
 		if err = binary.Read(r, binary.BigEndian, &remote); err != nil {
@@ -120,13 +120,13 @@ func (p protocol) checkRemoteID(r io.Reader, id PeerID) func() error {
 	}
 }
 
-func (p protocol) sendDialback(w io.Writer, a Addr) func() error {
+func sendDialback(w io.Writer, a Addr) func() error {
 	return func() error {
 		return errors.Wrap(struc.Pack(w, newWireAddr(a)), "send dialback")
 	}
 }
 
-func (p protocol) sendID(w io.Writer, id PeerID) func() error {
+func sendID(w io.Writer, id PeerID) func() error {
 	return func() (err error) {
 		if err = binary.Write(w, binary.BigEndian, id); err != nil {
 			return errors.Wrap(err, "transmit local ID")
@@ -135,7 +135,7 @@ func (p protocol) sendID(w io.Writer, id PeerID) func() error {
 	}
 }
 
-func (p protocol) recvDialback(r io.Reader, a *wireAddr) func() error {
+func recvDialback(r io.Reader, a *wireAddr) func() error {
 	return func() error {
 		return errors.Wrap(struc.Unpack(r, a), "recv dialback")
 	}
