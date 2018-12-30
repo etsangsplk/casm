@@ -10,24 +10,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-type ctxKey uint8
-
-const (
-	keyAddr ctxKey = iota
-	keyLog
-)
-
 type basicHost struct {
 	c context.Context
-	t net.TransportFactory
+	l log.Logger
+
+	a net.Addr
+	t *net.Transport
 
 	mux   *streamMux
 	peers *peerStore
 }
 
-func (bh basicHost) Addr() net.Addr {
-	return bh.c.Value(keyAddr).(net.Addr)
-}
+func (bh basicHost) Addr() net.Addr { return bh.a }
 
 func (bh basicHost) Network() Network {
 	if bh.c == nil {
@@ -36,9 +30,12 @@ func (bh basicHost) Network() Network {
 	return bh
 }
 
-func (bh basicHost) log() log.Logger { return bh.c.Value(keyLog).(log.Logger) }
-
-func (bh basicHost) setLog(l log.Logger) { log.Set(bh.c, l) }
+func (bh basicHost) log() log.Logger {
+	return bh.l.WithFields(log.F{
+		"id":         bh.a.ID(),
+		"local_peer": bh.a,
+	})
+}
 
 func (bh basicHost) Stream() StreamManager { return bh }
 
@@ -50,24 +47,11 @@ func (bh basicHost) Context() context.Context {
 }
 
 func (bh *basicHost) ListenAndServe(c context.Context, a net.Addr) error {
-	c = context.WithValue(c, keyAddr, a)
-	bh.setLog(bh.log().WithFields(log.F{
-		"id":         a.ID(),
-		"local_peer": a,
-	}))
+	bh.a = a // assign listen address
 
-	t, err := bh.t.NewTransport(a)
-	if err != nil {
-		return errors.Wrap(err, "init transport")
-	}
+	c = log.Set(bh.c, bh.log().WithLocus("listener"))
 
-	return bh.listenAndServe(t)
-}
-
-func (bh basicHost) listenAndServe(t net.Transport) error {
-	c := log.Set(bh.c, bh.log().WithLocus("transport"))
-
-	l, err := t.Listen(c)
+	l, err := bh.t.NewListener(a).Listen(c)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
@@ -77,9 +61,10 @@ func (bh basicHost) listenAndServe(t net.Transport) error {
 
 	bh.log().Info("started host")
 	return nil
+
 }
 
-func (bh basicHost) startAccepting(l net.Listener) {
+func (bh basicHost) startAccepting(l *net.Listener) {
 	var err error
 	var conn *net.Conn
 
@@ -182,12 +167,7 @@ func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
 		return errors.Errorf("%s already connected", a.Addr().ID())
 	}
 
-	t, err := bh.t.NewTransport(c.Value(keyAddr).(net.Addr))
-	if err != nil {
-		return errors.Wrap(err, "init transport")
-	}
-
-	conn, err := t.Dial(c, a.Addr())
+	conn, err := bh.t.NewDialer(bh.a).Dial(c, a.Addr())
 	if err != nil {
 		return errors.Wrap(err, "dial")
 	}

@@ -2,81 +2,121 @@ package net
 
 import (
 	"context"
+	"net"
 
 	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/pkg/errors"
 )
 
-// Transport is a means by which to connect to an listen for connections from
-// other peers.
-type Transport interface {
-	Addr() Addr
-	Listen(context.Context) (Listener, error)
+// ProtoDialer can initiate connection upgrades using the casm network protocol.
+type ProtoDialer interface {
 	Dial(context.Context, Addr) (*Conn, error)
+	UpgradeDialer(pipe.Conn, Addr, PeerID) error
 }
 
-// TransportFactory initializes a net.Transport.  Listeneres produced by said
-// Transport will bind to the specified address, and Dialers will transmit this
-// same address as a dialback point.
-type TransportFactory interface {
-	NewTransport(Addr) (Transport, error)
+// ProtoListener can produce a listener that negotiates connection upgrades
+// according to the casm network protocol.
+type ProtoListener interface {
+	Listen(context.Context) (*Listener, error)
+	UpgradeListener(pipe.Conn, Addr) (remote Addr, err error)
 }
 
-// TransportFactoryFunc wraps an address in order to satisfy TransportFactory.
-type TransportFactoryFunc func(Addr) (Transport, error)
-
-// NewTransport satisfies TransportFactory
-func (f TransportFactoryFunc) NewTransport(a Addr) (Transport, error) {
-	return f(a)
+// Upgrader negotiates a connection upgrade according to the CASM protocol
+type Upgrader interface {
+	UpgradeDialer(pipe.Conn, Addr, PeerID) error
+	UpgradeListener(pipe.Conn, Addr) (remote Addr, err error)
 }
 
-// NewFactory builds a TransportFactory from a pipe.Transport
-func NewFactory(t pipe.Transport) TransportFactory {
-	return TransportFactoryFunc(func(a Addr) (Transport, error) {
-		return pipeTransport{
-			listen:    a,
-			Transport: t,
-		}, nil
-	})
-}
-
-type pipeTransport struct {
-	listen Addr
-	pipe.Transport
-}
-
-func (t pipeTransport) Addr() Addr { return t.listen }
-
-// Listen for connections
-func (t pipeTransport) Listen(c context.Context) (Listener, error) {
-	l, err := t.Transport.Listen(c, t.listen)
-	if err != nil {
-		return Listener{}, err
+type (
+	pipeDialer interface {
+		Dial(context.Context, net.Addr) (pipe.Conn, error)
 	}
 
-	// use the listener's address, because of address resolution. (e.g. ":80")
-	a := NewAddr(t.listen.ID(), l.Addr().Network(), l.Addr().String())
-	return Listener{addr: a, Listener: l}, nil
-}
-
-// Dial into a remote listener
-func (t pipeTransport) Dial(c context.Context, a Addr) (*Conn, error) {
-	conn, err := t.Transport.Dial(c, a)
-	if err != nil {
-		return nil, errors.Wrap(err, "transport")
+	pipeListener interface {
+		Listen(context.Context, net.Addr) (pipe.Listener, error)
 	}
 
-	return mkConn(conn.(pipeWrapper).edge, conn), nil
+	dialUpgradeHandler interface {
+		UpgradeDialer(pipe.Conn, Addr, PeerID) error
+	}
+
+	listenUpgradeHandler interface {
+		UpgradeListener(pipe.Conn, Addr) (remote Addr, err error)
+	}
+)
+
+// Transport is an abstraction over a reliable network connection.  The NewDialer
+// and NewListener methods bind a dialback/listen address, respectively, to the
+// ProtoDialer & ProtoListener.
+type Transport struct {
+	pt pipe.Transport
+	u  Upgrader
+}
+
+// NewTransport binds a pipewerks Transport to an Upgrader.
+func NewTransport(t pipe.Transport, u Upgrader) *Transport {
+	return &Transport{
+		pt: t,
+		u:  u,
+	}
+}
+
+// NewDialer binds a dialback Addr to the Transport
+func (t Transport) NewDialer(dialback Addr) ProtoDialer {
+	return dialer{pipeDialer: t.pt, local: dialback, dialUpgradeHandler: t.u}
+}
+
+// NewListener binds a listen Addr to the Transport
+func (t Transport) NewListener(listen Addr) ProtoListener {
+	return listener{pipeListener: t.pt, local: listen, listenUpgradeHandler: t.u}
+}
+
+type dialer struct {
+	local Addr
+	pipeDialer
+	dialUpgradeHandler
+}
+
+func (d dialer) Dial(c context.Context, a Addr) (*Conn, error) {
+	pc, err := d.pipeDialer.Dial(c, a)
+	if err != nil {
+		return nil, errors.Wrap(err, "dial pipe")
+	}
+
+	// Handshake
+	// 1. announce who we are to the listener (who has no idea right now)
+	// 2. verify that PIDs match
+	if err = d.UpgradeDialer(pc, d.local, a.ID()); err != nil {
+		return nil, errors.Wrap(err, "upgrade")
+	}
+
+	return &Conn{Conn: pc, local: d.local, remote: a}, nil
+}
+
+type listener struct {
+	local Addr
+	pipeListener
+	listenUpgradeHandler
+}
+
+func (l listener) Listen(c context.Context) (*Listener, error) {
+	pl, err := l.pipeListener.Listen(c, l.local)
+	if err != nil {
+		return nil, errors.Wrap(err, "listen pipe")
+	}
+
+	return &Listener{Listener: pl, a: l.local, u: l}, nil
 }
 
 // Listener can listen for incoming connections
 type Listener struct {
-	addr Addr
+	a Addr
+	u listenUpgradeHandler
 	pipe.Listener
 }
 
 // Addr is the local listen address
-func (l Listener) Addr() Addr { return l.addr }
+func (l Listener) Addr() Addr { return l.a }
 
 // Accept the next incoming connection
 func (l Listener) Accept() (*Conn, error) {
@@ -85,5 +125,13 @@ func (l Listener) Accept() (*Conn, error) {
 		return nil, errors.Wrap(err, "accept")
 	}
 
-	return mkConn(conn.(pipeWrapper).edge, conn), nil
+	// Handshake
+	// 1. who called us?
+	// 2. send our PID so that he can confirm that he reached the right entity
+	a, err := l.u.UpgradeListener(conn, l.a)
+	if err != nil {
+		return nil, errors.Wrap(err, "upgrade")
+	}
+
+	return &Conn{Conn: conn, local: l.a, remote: a}, nil
 }

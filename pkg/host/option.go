@@ -1,8 +1,6 @@
 package host
 
 import (
-	"context"
-
 	net "github.com/lthibault/casm/pkg/net"
 	log "github.com/lthibault/log/pkg"
 )
@@ -17,24 +15,14 @@ func OptLogger(l log.Logger) Option {
 	}
 
 	return func(bh *basicHost) (prev Option) {
-		var old log.Logger
-
-		if bh.c == nil {
-			old = nil
-			bh.c = context.WithValue(context.Background(), keyLog, l)
-		} else {
-			old = bh.c.Value(keyLog).(log.Logger)
-		}
-
-		prev = OptLogger(old)
-		bh.c = context.WithValue(bh.c, keyLog, l.WithLocus("host"))
-
+		prev = OptLogger(bh.l)
+		bh.l = l
 		return
 	}
 }
 
 // OptTransport sets the net.Transport.
-func OptTransport(t net.TransportFactory) Option {
+func OptTransport(t *net.Transport) Option {
 	return func(bh *basicHost) (prev Option) {
 		prev = OptTransport(bh.t)
 		bh.t = t

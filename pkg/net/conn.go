@@ -12,14 +12,6 @@ type Conn struct {
 	pipe.Conn
 }
 
-func mkConn(e edge, conn pipe.Conn) *Conn {
-	return &Conn{
-		local:  e.Local,
-		remote: e.Remote,
-		Conn:   conn,
-	}
-}
-
 // LocalAddr of the connection
 func (c Conn) LocalAddr() Addr { return c.local }
 

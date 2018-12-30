@@ -3,9 +3,11 @@ package host
 import (
 	"context"
 
+	"github.com/lthibault/pipewerks/pkg/transport/generic"
+	"github.com/lthibault/pipewerks/pkg/transport/tcp"
+
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
-	"github.com/lthibault/pipewerks/pkg/transport/tcp"
 )
 
 // Network manages raw connections
@@ -31,10 +33,17 @@ type Host interface {
 	ListenAndServe(context.Context, net.Addr) error
 }
 
+func defaultTransportFactory() *net.Transport {
+	return net.NewTransport(
+		tcp.New(tcp.OptGeneric(generic.OptConnectHandler(net.RawConnUpgrader{}))),
+		net.RawConnUpgrader{},
+	)
+}
+
 func setDefaultOpts(opt []Option) []Option {
 	return append(
 		[]Option{
-			OptTransport(net.NewFactory(tcp.New())),
+			OptTransport(defaultTransportFactory()),
 			OptLogger(nil),
 		},
 		opt...,
