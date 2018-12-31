@@ -50,5 +50,5 @@ func (p *Path) ReadFrom(r io.Reader) (n int64, err error) {
 		*p = Path(b.String())
 	}
 
-	return n, nil
+	return
 }
