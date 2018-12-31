@@ -159,7 +159,6 @@ func TestProto(t *testing.T) {
 }
 
 func TestPipeConnUpgrader(t *testing.T) {
-	var u PipeConnUpgrader
 	it := inproc.New()
 
 	da := addr{
@@ -194,10 +193,10 @@ func TestPipeConnUpgrader(t *testing.T) {
 	var a Addr
 	var g errgroup.Group
 	g.Go(func() error {
-		return u.UpgradeDialer(dc, da, la.ID())
+		return upgrader.UpgradeDialer(dc, da, la.ID())
 	})
 	g.Go(func() (err error) {
-		a, err = u.UpgradeListener(lc, la)
+		a, err = upgrader.UpgradeListener(lc, la)
 		return
 	})
 	assert.NoError(t, g.Wait())

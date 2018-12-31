@@ -9,7 +9,6 @@ import (
 	"github.com/lunixbochs/struc"
 
 	pipe "github.com/lthibault/pipewerks/pkg"
-	"github.com/lthibault/pipewerks/pkg/transport/generic"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -18,45 +17,15 @@ const (
 	upgradeDeadline = time.Second * 5
 )
 
-// RawConnUpgrader can negotiate a connection upgrade for any pipewerks transport
-// that features raw connection hooks.  This is the case for all transports built
-// on top of pipewerks' `generic` transport, e.g. TCP.
-//
-// N.B.: RawConnUpgrader must be passed both to NewTransport as an Upgrader as
-// well as to the pipe.Transport constructor via a `generic.OptConnectHandler`.
-type RawConnUpgrader struct{}
+var (
+	proto    protocol
+	upgrader pipeConnUpgrader
+)
 
-// Connected satisfies pipewerks' generic.OnConnect
-func (u RawConnUpgrader) Connected(conn net.Conn, e generic.EndpointType) (net.Conn, error) {
-	switch e {
-	case generic.DialEndpoint:
-		panic("NOT IMPLEMENTED")
-	case generic.ListenEndpoint:
-		panic("NOT IMPLEMENTED")
-	default:
-		panic("unreachable")
-	}
-}
+type pipeConnUpgrader struct{}
 
 // UpgradeDialer satisfies Upgrader
-func (u RawConnUpgrader) UpgradeDialer(conn pipe.Conn, remote PeerID) error {
-	panic("function NOT IMPLEMENTED")
-}
-
-// UpgradeListener satisfies Upgrader
-func (u RawConnUpgrader) UpgradeListener(conn pipe.Conn, local Addr) (remote Addr, err error) {
-	panic("function NOT IMPLEMENTED")
-}
-
-// PipeConnUpgrader uses pipewerks Streams to negotiate the connection upgrade.
-// It is compatible with any pipe.Transport.
-//
-// N.B.: PipeConnUpgrader must open and close a stream in order for negotiation
-// to take place, which may increase latency.
-type PipeConnUpgrader struct{}
-
-// UpgradeDialer satisfies Upgrader
-func (u PipeConnUpgrader) UpgradeDialer(conn pipe.Conn, local Addr, remote PeerID) error {
+func (u pipeConnUpgrader) UpgradeDialer(conn pipe.Conn, local Addr, remote PeerID) error {
 	s, err := conn.OpenStream()
 	if err != nil {
 		return errors.Wrap(err, "open stream")
@@ -66,7 +35,7 @@ func (u PipeConnUpgrader) UpgradeDialer(conn pipe.Conn, local Addr, remote PeerI
 }
 
 // UpgradeListener satisfies Upgrader
-func (u PipeConnUpgrader) UpgradeListener(conn pipe.Conn, local Addr) (remote Addr, err error) {
+func (u pipeConnUpgrader) UpgradeListener(conn pipe.Conn, local Addr) (remote Addr, err error) {
 	s, err := conn.AcceptStream()
 	if err != nil {
 		return nil, errors.Wrap(err, "accept stream")
@@ -74,8 +43,6 @@ func (u PipeConnUpgrader) UpgradeListener(conn pipe.Conn, local Addr) (remote Ad
 
 	return proto.upgradeListener(s, local)
 }
-
-var proto protocol
 
 type protocol struct{}
 
