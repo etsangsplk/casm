@@ -6,8 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/lunixbochs/struc"
-
 	pipe "github.com/lthibault/pipewerks/pkg"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -89,7 +87,7 @@ func checkRemoteID(r io.Reader, id PeerID) func() error {
 
 func sendDialback(w io.Writer, a Addr) func() error {
 	return func() error {
-		return errors.Wrap(struc.Pack(w, newWireAddr(a)), "send dialback")
+		return errors.Wrap(newWireAddr(a).Dump(w), "send dialback")
 	}
 }
 
@@ -104,6 +102,6 @@ func sendID(w io.Writer, id PeerID) func() error {
 
 func recvDialback(r io.Reader, a *wireAddr) func() error {
 	return func() error {
-		return errors.Wrap(struc.Unpack(r, a), "recv dialback")
+		return errors.Wrap(a.Load(r), "recv dialback")
 	}
 }

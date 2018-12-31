@@ -1,7 +1,10 @@
 package net
 
 import (
+	"io"
 	"net"
+
+	"github.com/lunixbochs/struc"
 )
 
 // Addr of a Host
@@ -87,3 +90,6 @@ func (a wireAddr) Addr() Addr      { return a }
 func (a wireAddr) Network() string { return a.Net.String() }
 func (a wireAddr) Proto() string   { return a.ProtoStr }
 func (a wireAddr) String() string  { return a.AddrStr }
+
+func (a *wireAddr) Load(r io.Reader) error { return struc.Unpack(r, a) }
+func (a wireAddr) Dump(w io.Writer) error  { return struc.Pack(w, a) }
