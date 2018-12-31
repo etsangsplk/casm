@@ -1,4 +1,4 @@
-// Package casm implements raw CASM hosts
+// Package casm implements shared interfaces
 package casm
 
 import (
