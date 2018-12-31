@@ -1,3 +1,4 @@
+// Package host implements CASM's p2p host model
 package host
 
 import (

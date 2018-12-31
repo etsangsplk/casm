@@ -1,3 +1,4 @@
+// Package net provides a standard interface for network IO throughout CASM.
 package net
 
 import (
