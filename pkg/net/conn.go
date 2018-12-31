@@ -21,13 +21,13 @@ func (c Conn) RemoteAddr() Addr { return c.remote }
 // AcceptStream listens for the next incoming stream
 func (c Conn) AcceptStream() (*Stream, error) {
 	s, err := c.Conn.AcceptStream()
-	return &Stream{Stream: s}, err
+	return &Stream{Stream: s, addrs: c}, err
 }
 
 // OpenStream dials a stream
 func (c Conn) OpenStream() (*Stream, error) {
 	s, err := c.Conn.OpenStream()
-	return &Stream{Stream: s}, err
+	return &Stream{Stream: s, addrs: c}, err
 }
 
 // WithContext returns a new Stream, bound to the specified context.  Many

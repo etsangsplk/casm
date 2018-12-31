@@ -6,8 +6,22 @@ import (
 	pipe "github.com/lthibault/pipewerks/pkg"
 )
 
+type localRemoteAddresser interface {
+	LocalAddr() Addr
+	RemoteAddr() Addr
+}
+
 // Stream is a bidirectional connection between two hosts.
-type Stream struct{ pipe.Stream }
+type Stream struct {
+	pipe.Stream
+	addrs localRemoteAddresser
+}
+
+// LocalAddr of the stream
+func (s *Stream) LocalAddr() Addr { return s.addrs.LocalAddr() }
+
+// RemoteAddr of the peer
+func (s *Stream) RemoteAddr() Addr { return s.addrs.RemoteAddr() }
 
 // WithContext returns a new Stream, bound to the specified context.  Many
 // applications assume Stream.Context() expires when the stream is closed, so
