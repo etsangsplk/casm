@@ -55,43 +55,24 @@ func (u RawConnUpgrader) UpgradeListener(conn pipe.Conn, local Addr) (remote Add
 // to take place, which may increase latency.
 type PipeConnUpgrader struct{}
 
-// BindDialback address to a partial DialUpgrader
-func (PipeConnUpgrader) BindDialback(a Addr) func(Addr) DialUpgrader {
-	return func(remote Addr) DialUpgrader {
-		return pcDialUpgrader{
-			local:  a,
-			remote: remote,
-		}
-	}
-}
-
-// BindListen address to a ListenUpgrader
-func (PipeConnUpgrader) BindListen(a Addr) ListenUpgrader {
-	return pcListenUpgrader{local: a}
-}
-
-type pcDialUpgrader struct{ local, remote Addr }
-
-func (u pcDialUpgrader) UpgradeDialer(conn pipe.Conn) error {
+// UpgradeDialer satisfies Upgrader
+func (u PipeConnUpgrader) UpgradeDialer(conn pipe.Conn, local Addr, remote PeerID) error {
 	s, err := conn.OpenStream()
 	if err != nil {
 		return errors.Wrap(err, "open stream")
 	}
-	defer s.Close()
 
-	return proto.upgradeDialer(s, u.local, u.remote.ID())
+	return proto.upgradeDialer(s, local, remote)
 }
 
-type pcListenUpgrader struct{ local Addr }
-
-func (u pcListenUpgrader) UpgradeListener(conn pipe.Conn) (remote Addr, err error) {
+// UpgradeListener satisfies Upgrader
+func (u PipeConnUpgrader) UpgradeListener(conn pipe.Conn, local Addr) (remote Addr, err error) {
 	s, err := conn.AcceptStream()
 	if err != nil {
 		return nil, errors.Wrap(err, "accept stream")
 	}
-	defer s.Close()
 
-	return proto.upgradeListener(s, u.local)
+	return proto.upgradeListener(s, local)
 }
 
 var proto protocol
