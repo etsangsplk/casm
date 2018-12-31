@@ -159,8 +159,6 @@ func TestProto(t *testing.T) {
 }
 
 func TestPipeConnUpgrader(t *testing.T) {
-	var u PipeConnUpgrader
-	it := inproc.New()
 
 	da := addr{
 		PeerID:  New(),
@@ -175,6 +173,12 @@ func TestPipeConnUpgrader(t *testing.T) {
 		network: inprocType.String(),
 		addr:    "/test/bravo",
 	}
+
+	var u PipeConnUpgrader
+	du := u.BindDialback(da)(la)
+	lu := u.BindListen(la)
+
+	it := inproc.New()
 
 	l, err := it.Listen(context.Background(), la)
 	assert.NoError(t, err)
@@ -194,10 +198,10 @@ func TestPipeConnUpgrader(t *testing.T) {
 	var a Addr
 	var g errgroup.Group
 	g.Go(func() error {
-		return u.UpgradeDialer(dc, da, la.ID())
+		return du.UpgradeDialer(dc)
 	})
 	g.Go(func() (err error) {
-		a, err = u.UpgradeListener(lc, la)
+		a, err = lu.UpgradeListener(lc)
 		return
 	})
 	assert.NoError(t, g.Wait())
@@ -206,4 +210,8 @@ func TestPipeConnUpgrader(t *testing.T) {
 	assert.Equal(t, da.Network(), a.Network())
 	assert.Equal(t, da.Proto(), a.Proto())
 	assert.Equal(t, da.String(), a.String())
+}
+
+func TestRawConnUpgrader(t *testing.T) {
+	// TODO
 }

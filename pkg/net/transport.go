@@ -11,20 +11,28 @@ import (
 // ProtoDialer can initiate connection upgrades using the casm network protocol.
 type ProtoDialer interface {
 	Dial(context.Context, Addr) (*Conn, error)
-	UpgradeDialer(pipe.Conn, Addr, PeerID) error
 }
 
 // ProtoListener can produce a listener that negotiates connection upgrades
 // according to the casm network protocol.
 type ProtoListener interface {
 	Listen(context.Context) (*Listener, error)
-	UpgradeListener(pipe.Conn, Addr) (remote Addr, err error)
 }
 
 // Upgrader negotiates a connection upgrade according to the CASM protocol
 type Upgrader interface {
-	UpgradeDialer(pipe.Conn, Addr, PeerID) error
-	UpgradeListener(pipe.Conn, Addr) (remote Addr, err error)
+	BindDialback(Addr) func(Addr) DialUpgrader
+	BindListen(Addr) ListenUpgrader
+}
+
+// DialUpgrader negotiates a connection upgrade from the dial endpoint.
+type DialUpgrader interface {
+	UpgradeDialer(pipe.Conn) error
+}
+
+// ListenUpgrader negotiates a connection upgrade from the listen endpoint.
+type ListenUpgrader interface {
+	UpgradeListener(pipe.Conn) (Addr, error)
 }
 
 type (
@@ -34,14 +42,6 @@ type (
 
 	pipeListener interface {
 		Listen(context.Context, net.Addr) (pipe.Listener, error)
-	}
-
-	dialUpgradeHandler interface {
-		UpgradeDialer(pipe.Conn, Addr, PeerID) error
-	}
-
-	listenUpgradeHandler interface {
-		UpgradeListener(pipe.Conn, Addr) (remote Addr, err error)
 	}
 )
 
@@ -63,30 +63,37 @@ func NewTransport(t pipe.Transport, u Upgrader) *Transport {
 
 // NewDialer binds a dialback Addr to the Transport
 func (t Transport) NewDialer(dialback Addr) ProtoDialer {
-	return dialer{pipeDialer: t.pt, local: dialback, dialUpgradeHandler: t.u}
+	return dialer{
+		pipeDialer:      t.pt,
+		local:           dialback,
+		newDialUpgrader: t.u.BindDialback(dialback),
+	}
 }
 
 // NewListener binds a listen Addr to the Transport
 func (t Transport) NewListener(listen Addr) ProtoListener {
-	return listener{pipeListener: t.pt, local: listen, listenUpgradeHandler: t.u}
+	return listener{
+		pipeListener: t.pt,
+		local:        listen,
+		u:            t.u.BindListen(listen),
+	}
 }
 
 type dialer struct {
 	local Addr
 	pipeDialer
-	dialUpgradeHandler
+	newDialUpgrader func(Addr) DialUpgrader
 }
 
 func (d dialer) Dial(c context.Context, a Addr) (*Conn, error) {
+	du := d.newDialUpgrader(a)
+
 	pc, err := d.pipeDialer.Dial(c, a)
 	if err != nil {
 		return nil, errors.Wrap(err, "dial pipe")
 	}
 
-	// Handshake
-	// 1. announce who we are to the listener (who has no idea right now)
-	// 2. verify that PIDs match
-	if err = d.UpgradeDialer(pc, d.local, a.ID()); err != nil {
+	if err = du.UpgradeDialer(pc); err != nil {
 		return nil, errors.Wrap(err, "upgrade")
 	}
 
@@ -96,7 +103,7 @@ func (d dialer) Dial(c context.Context, a Addr) (*Conn, error) {
 type listener struct {
 	local Addr
 	pipeListener
-	listenUpgradeHandler
+	u ListenUpgrader
 }
 
 func (l listener) Listen(c context.Context) (*Listener, error) {
@@ -105,13 +112,13 @@ func (l listener) Listen(c context.Context) (*Listener, error) {
 		return nil, errors.Wrap(err, "listen pipe")
 	}
 
-	return &Listener{Listener: pl, a: l.local, u: l}, nil
+	return &Listener{Listener: pl, a: l.local, u: l.u}, nil
 }
 
 // Listener can listen for incoming connections
 type Listener struct {
 	a Addr
-	u listenUpgradeHandler
+	u ListenUpgrader
 	pipe.Listener
 }
 
@@ -125,7 +132,7 @@ func (l Listener) Accept() (*Conn, error) {
 		return nil, errors.Wrap(err, "accept")
 	}
 
-	a, err := l.u.UpgradeListener(conn, l.a)
+	a, err := l.u.UpgradeListener(conn)
 	if err != nil {
 		return nil, errors.Wrap(err, "upgrade")
 	}
