@@ -51,7 +51,7 @@ func New(opt ...Option) Host {
 		fn(bh)
 	}
 
-	bh.streamMux = newStreamMux(bh.log().WithLocus("mux"))
+	bh.streamMux = newStreamMux(bh.l.WithLocus("mux"))
 	bh.peers = newPeerStore()
 	return bh
 }

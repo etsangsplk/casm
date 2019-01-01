@@ -14,15 +14,15 @@ var (
 	c       = context.Background()
 	timeout = time.Second * 60
 
-	addr0 = "inproc://127.0.0.1:9021"
-	addr1 = "inproc://127.0.0.1:9022"
+	addr0 = net.NewAddr(net.New(), "", "inproc", "/0")
+	addr1 = net.NewAddr(net.New(), "", "inproc", "/1")
 )
 
 func main() {
 	log := log.New(log.OptLevel(log.DebugLevel))
 
-	h0 := host.New(host.OptLogger(log), host.OptListenAddr(addr0))
-	h0.Stream().Register("/echo", net.HandlerFunc(func(s *net.Stream) {
+	h0 := host.New(host.OptLogger(log))
+	h0.Stream().Register("/echo", host.HandlerFunc(func(s host.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
 		b := make([]byte, 11)
@@ -43,13 +43,13 @@ func main() {
 		}
 	}))
 
-	h1 := host.New(host.OptLogger(log), host.OptListenAddr(addr1))
+	h1 := host.New(host.OptLogger(log))
 
-	if err := h0.Start(c); err != nil {
+	if err := h0.ListenAndServe(c, addr0); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := h1.Start(c); err != nil {
+	if err := h1.ListenAndServe(c, addr1); err != nil {
 		log.Fatal(err)
 	}
 
