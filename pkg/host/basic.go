@@ -104,17 +104,17 @@ func (bh basicHost) handle(conn *net.Conn) {
 		})
 		l.Debug("handling stream")
 
-		go bh.handleStream(s.WithContext(log.Set(s.Context(), l)))
+		go handleStream(bh, s.WithContext(log.Set(s.Context(), l)))
 	}
 }
 
-func (bh basicHost) handleStream(s *net.Stream) {
+func handleStream(h Handler, s *net.Stream) {
 	var p path
 	if err := p.RecvFrom(s); err != nil {
 		log.Get(s.Context()).WithError(err).Debug("failed to read path")
 	}
 
-	bh.Serve(stream{path: p.String(), Stream: s})
+	h.Serve(stream{path: p.String(), Stream: s})
 }
 
 /*
