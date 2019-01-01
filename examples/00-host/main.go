@@ -8,6 +8,7 @@ import (
 	"github.com/lthibault/casm/pkg/host"
 	"github.com/lthibault/casm/pkg/net"
 	log "github.com/lthibault/log/pkg"
+	"github.com/lthibault/pipewerks/pkg/transport/inproc"
 )
 
 var (
@@ -16,12 +17,14 @@ var (
 
 	addr0 = net.NewAddr(net.New(), "", "inproc", "/0")
 	addr1 = net.NewAddr(net.New(), "", "inproc", "/1")
+
+	t = net.NewTransport(inproc.New())
 )
 
 func main() {
 	log := log.New(log.OptLevel(log.DebugLevel))
 
-	h0 := host.New(host.OptLogger(log))
+	h0 := host.New(host.OptLogger(log), host.OptTransport(t))
 	h0.Stream().Register("/echo", host.HandlerFunc(func(s host.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
@@ -43,7 +46,7 @@ func main() {
 		}
 	}))
 
-	h1 := host.New(host.OptLogger(log))
+	h1 := host.New(host.OptLogger(log), host.OptTransport(t))
 
 	if err := h0.ListenAndServe(c, addr0); err != nil {
 		log.Fatal(err)

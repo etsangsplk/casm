@@ -11,7 +11,6 @@ import (
 )
 
 type basicHost struct {
-	c context.Context
 	l log.Logger
 
 	a net.Addr
@@ -21,15 +20,6 @@ type basicHost struct {
 	peers *peerStore
 }
 
-func (bh basicHost) Addr() net.Addr { return bh.a }
-
-func (bh basicHost) Network() Network {
-	if bh.c == nil {
-		panic(errors.New("host not started"))
-	}
-	return bh
-}
-
 func (bh basicHost) log() log.Logger {
 	return bh.l.WithFields(log.F{
 		"id":         bh.a.ID(),
@@ -37,38 +27,33 @@ func (bh basicHost) log() log.Logger {
 	})
 }
 
+func (bh basicHost) Addr() net.Addr        { return bh.a }
+func (bh basicHost) Network() Network      { return bh }
 func (bh basicHost) Stream() StreamManager { return bh }
-
-func (bh basicHost) Context() context.Context {
-	if bh.c == nil {
-		panic(errors.New("host not started"))
-	}
-	return bh.c
-}
 
 func (bh *basicHost) ListenAndServe(c context.Context, a net.Addr) error {
 	bh.a = a // assign listen address
 
-	c = log.Set(bh.c, bh.log().WithLocus("listener"))
+	c = log.Set(c, bh.log().WithLocus("listener"))
 
 	l, err := bh.t.NewListener(a).Listen(c)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-	ctx.Defer(bh.c, func() { l.Close() })
+	ctx.Defer(c, func() { l.Close() })
 
-	go bh.startAccepting(l)
+	go bh.startAccepting(c, l)
 
 	bh.log().Info("started host")
 	return nil
 
 }
 
-func (bh basicHost) startAccepting(l *net.Listener) {
+func (bh basicHost) startAccepting(c context.Context, l *net.Listener) {
 	var err error
 	var conn *net.Conn
 
-	for range ctx.Tick(bh.c) {
+	for range ctx.Tick(c) {
 		if conn, err = l.Accept(); err != nil {
 			bh.log().WithError(err).Warn("failed to accept conn")
 			return
@@ -83,16 +68,16 @@ func (bh basicHost) startAccepting(l *net.Listener) {
 		l := bh.log().WithField("remote_peer", conn.RemoteAddr())
 
 		l.Debug("connection accepted")
-		go bh.handle(conn.WithContext(log.Set(conn.Context(), l)))
+		go bh.handle(c, conn.WithContext(log.Set(conn.Context(), l)))
 	}
 }
 
-func (bh basicHost) handle(conn *net.Conn) {
+func (bh basicHost) handle(c context.Context, conn *net.Conn) {
 	defer bh.Disconnect(conn.RemoteAddr())
 
 	var err error
 	var s *net.Stream
-	for range ctx.Tick(ctx.Link(bh.c, conn.Context())) {
+	for range ctx.Tick(ctx.Link(c, conn.Context())) {
 		if s, err = conn.AcceptStream(); err != nil {
 			bh.log().WithError(err).Warn("failed to accept stream")
 			return
