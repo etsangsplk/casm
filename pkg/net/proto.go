@@ -1,6 +1,7 @@
 package net
 
 import (
+	"encoding/binary"
 	"io"
 	"net"
 	"time"
@@ -75,7 +76,7 @@ func (protocol) upgradeListener(conn net.Conn, local Addr) (Addr, error) {
 func checkRemoteID(r io.Reader, id PeerID) func() error {
 	var remote PeerID
 	return func() (err error) {
-		if err = binary.Read(r, &remote); err != nil {
+		if err = binary.Read(r, binary.BigEndian, &remote); err != nil {
 			err = errors.Wrap(err, "read remote ID")
 		} else if remote != id {
 			err = errors.Errorf("expected remote peer %s, got %s", id, remote)
@@ -92,7 +93,7 @@ func sendDialback(w io.Writer, a Addr) func() error {
 
 func sendID(w io.Writer, id PeerID) func() error {
 	return func() (err error) {
-		if err = binary.Write(w, id); err != nil {
+		if err = binary.Write(w, binary.BigEndian, id); err != nil {
 			return errors.Wrap(err, "transmit local ID")
 		}
 		return

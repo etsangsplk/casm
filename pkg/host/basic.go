@@ -17,7 +17,7 @@ type basicHost struct {
 	a net.Addr
 	t *net.Transport
 
-	mux   *streamMux
+	*streamMux
 	peers *peerStore
 }
 
@@ -104,36 +104,24 @@ func (bh basicHost) handle(conn *net.Conn) {
 		})
 		l.Debug("handling stream")
 
-		c := log.Set(s.Context(), l)
-		go bh.handleStream(s.WithContext(c))
+		go bh.handleStream(s.WithContext(log.Set(s.Context(), l)))
 	}
 }
 
 func (bh basicHost) handleStream(s *net.Stream) {
-	var p net.Path
+	var p path
 	if err := p.RecvFrom(s); err != nil {
-		bh.log().WithError(err).Error("failed to read stream path")
-		return
+		log.Get(s.Context()).WithError(err).Debug("failed to read path")
 	}
 
-	l := bh.log().WithFields(log.F{"locus": "handler", "path": p})
-	c := log.Set(s.Context(), l)
-
-	bh.mux.Serve(p.String(), s.WithContext(c))
+	bh.Serve(stream{path: p.String(), Stream: s})
 }
 
 /*
 	implment StreamManager
 */
 
-func (bh basicHost) Register(path string, h net.Handler) {
-	c := log.Set(bh.c, bh.log().WithLocus("mux"))
-	bh.mux.Register(c, path, h)
-}
-
-func (bh basicHost) Unregister(path string) { bh.mux.Unregister(path) }
-
-func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
+func (bh basicHost) Open(a casm.Addresser, p string) (Stream, error) {
 	conn, ok := bh.peers.Get(a.Addr())
 	if !ok {
 		return nil, errors.New("peer not connected")
@@ -147,15 +135,17 @@ func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
 	l := bh.log().WithField("stream", s.StreamID())
 	l.Debug("stream opened")
 
-	if err = net.Path(path).SendTo(s); err != nil {
+	if err = path(p).SendTo(s); err != nil {
 		return nil, errors.Wrap(err, "write path")
 	}
 
-	l = l.WithField("path", path)
+	l = l.WithField("path", p)
 	l.Debug("header sent")
 
-	c := log.Set(s.Context(), l)
-	return s.WithContext(c), nil
+	return stream{
+		path:   p,
+		Stream: s.WithContext(log.Set(s.Context(), l)),
+	}, nil
 }
 
 /*
@@ -186,3 +176,10 @@ func (bh basicHost) Disconnect(id casm.IDer) {
 		conn.Close()
 	}
 }
+
+type stream struct {
+	path string
+	*net.Stream
+}
+
+func (s stream) Path() string { return s.path }

@@ -3,12 +3,29 @@ package host
 
 import (
 	"context"
+	"time"
 
 	tcp "github.com/lthibault/pipewerks/pkg/transport/tcp"
 
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
 )
+
+// Stream is a full-duplex stream on top of a single physical connection to
+// a remote host
+type Stream interface {
+	Path() string
+	Context() context.Context
+	StreamID() uint32
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+	Close() error
+	Read([]byte) (int, error)
+	Write([]byte) (int, error)
+	SetDeadline(time.Time) error
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
 
 // Network manages raw connections
 type Network interface {
@@ -18,9 +35,9 @@ type Network interface {
 
 // StreamManager manages streams, which are multiplexed on top of raw connections
 type StreamManager interface {
-	Register(string, net.Handler)
+	Register(string, Handler)
 	Unregister(string)
-	Open(casm.Addresser, string) (*net.Stream, error)
+	Open(casm.Addresser, string) (Stream, error)
 }
 
 // Host is a logical machine in a compute cluster.  It acts both as a server and
@@ -51,7 +68,7 @@ func New(opt ...Option) Host {
 		fn(bh)
 	}
 
-	bh.mux = newStreamMux(bh.log().WithLocus("mux"))
+	bh.streamMux = newStreamMux(bh.log().WithLocus("mux"))
 	bh.peers = newPeerStore()
 	return bh
 }
