@@ -111,7 +111,7 @@ func (bh basicHost) handle(conn *net.Conn) {
 
 func (bh basicHost) handleStream(s *net.Stream) {
 	var p net.Path
-	if _, err := p.ReadFrom(s); err != nil {
+	if err := p.ReadFrom(s); err != nil {
 		bh.log().WithError(err).Error("failed to read stream path")
 		return
 	}
@@ -147,7 +147,7 @@ func (bh basicHost) Open(a casm.Addresser, path string) (*net.Stream, error) {
 	l := bh.log().WithField("stream", s.StreamID())
 	l.Debug("stream opened")
 
-	if _, err = net.Path(path).WriteTo(s); err != nil {
+	if err = net.Path(path).WriteTo(s); err != nil {
 		return nil, errors.Wrap(err, "write path")
 	}
 
