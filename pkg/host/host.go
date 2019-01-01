@@ -3,29 +3,12 @@ package host
 
 import (
 	"context"
-	"time"
 
 	tcp "github.com/lthibault/pipewerks/pkg/transport/tcp"
 
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
 )
-
-// Stream is a full-duplex stream on top of a single physical connection to
-// a remote host
-type Stream interface {
-	Path() string
-	Context() context.Context
-	StreamID() uint32
-	LocalAddr() net.Addr
-	RemoteAddr() net.Addr
-	Close() error
-	Read([]byte) (int, error)
-	Write([]byte) (int, error)
-	SetDeadline(time.Time) error
-	SetReadDeadline(time.Time) error
-	SetWriteDeadline(time.Time) error
-}
 
 // Network manages raw connections
 type Network interface {

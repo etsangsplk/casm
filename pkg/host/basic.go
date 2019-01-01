@@ -176,10 +176,3 @@ func (bh basicHost) Disconnect(id casm.IDer) {
 		conn.Close()
 	}
 }
-
-type stream struct {
-	path string
-	*net.Stream
-}
-
-func (s stream) Path() string { return s.path }

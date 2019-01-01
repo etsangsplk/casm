@@ -2,14 +2,33 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 	"sync"
+	"time"
 
 	radix "github.com/armon/go-radix"
+	net "github.com/lthibault/casm/pkg/net"
 	log "github.com/lthibault/log/pkg"
 	"github.com/pkg/errors"
 )
+
+// Stream is a full-duplex stream on top of a single physical connection to
+// a remote host
+type Stream interface {
+	Path() string
+	Context() context.Context
+	StreamID() uint32
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+	Close() error
+	Read([]byte) (int, error)
+	Write([]byte) (int, error)
+	SetDeadline(time.Time) error
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
 
 // Handler responds to an incoming stream connection
 type Handler interface {
@@ -93,3 +112,10 @@ func (m *streamMux) Serve(s Stream) {
 		v.(Handler).Serve(s)
 	}
 }
+
+type stream struct {
+	path string
+	*net.Stream
+}
+
+func (s stream) Path() string { return s.path }
