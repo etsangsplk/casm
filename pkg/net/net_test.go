@@ -15,13 +15,13 @@ func TestPath(t *testing.T) {
 		assert.Equal(t, uint16(13), Path(s).lenHdr())
 	})
 
-	t.Run("WriteTo", func(t *testing.T) {
-		assert.NoError(t, Path(s).WriteTo(b))
+	t.Run("SendTo", func(t *testing.T) {
+		assert.NoError(t, Path(s).SendTo(b))
 	})
 
-	t.Run("ReadFrom", func(t *testing.T) {
+	t.Run("RecvFrom", func(t *testing.T) {
 		var p Path
-		assert.NoError(t, p.ReadFrom(b))
+		assert.NoError(t, p.RecvFrom(b))
 		assert.Equal(t, s, p.String())
 	})
 }

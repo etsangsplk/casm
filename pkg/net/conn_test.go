@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestStream(t *testing.T) {
-	var s Stream
+func TestConn(t *testing.T) {
+	var conn Conn
 	t.Run("WithContext", func(t *testing.T) {
 		c := context.Background()
-		assert.Equal(t, c, s.WithContext(c).Context())
+		assert.Equal(t, c, conn.WithContext(c).Context())
 	})
 }

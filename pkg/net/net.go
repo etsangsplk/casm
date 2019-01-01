@@ -45,8 +45,8 @@ func (p Path) lenHdr() uint16 { return uint16(len(p)) }
 
 func (p Path) String() string { return string(p) }
 
-// WriteTo a specified writer in big-endian format.
-func (p Path) WriteTo(w io.Writer) (err error) {
+// SendTo a specified writer in big-endian format.
+func (p Path) SendTo(w io.Writer) (err error) {
 	b := new(bytes.Buffer)
 	binary.Write(b, binary.BigEndian, p.lenHdr())
 	b.WriteString(p.String())
@@ -54,8 +54,8 @@ func (p Path) WriteTo(w io.Writer) (err error) {
 	return
 }
 
-// ReadFrom a specified reader and construct a Path.
-func (p *Path) ReadFrom(r io.Reader) (err error) {
+// RecvFrom a specified reader and construct a Path.
+func (p *Path) RecvFrom(r io.Reader) (err error) {
 	var hdr uint16
 	b := new(bytes.Buffer)
 
