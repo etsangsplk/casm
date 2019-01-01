@@ -21,40 +21,6 @@ type addr struct {
 	proto, network, addr string
 }
 
-type netType uint8
-
-func newNetType(a net.Addr) netType {
-	switch a.Network() {
-	case "":
-		return inprocType
-	case "tcp":
-		return tcpType
-	case "udp":
-		return udpType
-	default:
-		panic("invalid network string")
-	}
-}
-
-func (t netType) String() string {
-	switch t {
-	case inprocType:
-		return ""
-	case tcpType:
-		return "tcp"
-	case udpType:
-		return "udp"
-	default:
-		panic("invalid netType")
-	}
-}
-
-const (
-	inprocType netType = iota
-	tcpType
-	udpType
-)
-
 // NewAddr from an ID and an address stringer
 func NewAddr(id PeerID, net, p, a string) Addr {
 	return &addr{PeerID: id, network: net, proto: p, addr: a}
@@ -66,9 +32,10 @@ func (a addr) Proto() string   { return a.proto }
 func (a addr) String() string  { return a.addr }
 
 type wireAddr struct {
-	PID      PeerID  `struc:"uint64"`
-	Net      netType `struc:"uint8"`
-	ProtoLen int     `struc:"uint8,sizeof=ProtoStr"`
+	PID      PeerID `struc:"uint64"`
+	NetLen   int    `struc:"uint8,sizeof=NetStr"`
+	NetStr   string
+	ProtoLen int `struc:"uint8,sizeof=ProtoStr"`
 	ProtoStr string
 	AddrLen  int `struc:"uint8,sizeof=AddrStr"`
 	AddrStr  string
@@ -77,7 +44,8 @@ type wireAddr struct {
 func newWireAddr(a Addr) *wireAddr {
 	return &wireAddr{
 		PID:      a.ID(),
-		Net:      newNetType(a),
+		NetLen:   len(a.Network()),
+		NetStr:   a.Network(),
 		ProtoLen: len(a.Proto()),
 		ProtoStr: a.Proto(),
 		AddrLen:  len(a.String()),
@@ -87,9 +55,9 @@ func newWireAddr(a Addr) *wireAddr {
 
 func (a wireAddr) ID() PeerID      { return a.PID }
 func (a wireAddr) Addr() Addr      { return a }
-func (a wireAddr) Network() string { return a.Net.String() }
+func (a wireAddr) Network() string { return a.NetStr }
 func (a wireAddr) Proto() string   { return a.ProtoStr }
 func (a wireAddr) String() string  { return a.AddrStr }
 
-func (a *wireAddr) Load(r io.Reader) error { return struc.Unpack(r, a) }
-func (a wireAddr) Dump(w io.Writer) error  { return struc.Pack(w, a) }
+func (a *wireAddr) RecvFrom(r io.Reader) error { return struc.Unpack(r, a) }
+func (a *wireAddr) SendTo(w io.Writer) error   { return struc.Pack(w, a) }

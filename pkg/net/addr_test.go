@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/lunixbochs/struc"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestAddr(t *testing.T) {
+	a := addr{PeerID: New(), proto: "proto", network: "net", addr: "addr"}
+	assert.Equal(t, a, a.Addr())
+}
 
 func TestWireAddr(t *testing.T) {
 	var wa *wireAddr
@@ -16,26 +20,21 @@ func TestWireAddr(t *testing.T) {
 		a := addr{
 			PeerID:  New(),
 			proto:   "inproc",
-			network: inprocType.String(),
+			network: "",
 			addr:    "/test",
 		}
 		wa = newWireAddr(a)
-		assert.Equal(t, a.ID(), wa.ID())
-		assert.Equal(t, a.Network(), wa.Network())
-		assert.Equal(t, a.Proto(), wa.Proto())
-		assert.Equal(t, a.String(), wa.String())
+		assertAddrEqual(t, a, wa)
+		assertAddrEqual(t, wa, wa.Addr())
 	})
 
-	t.Run("MarshalBinary", func(t *testing.T) {
-		assert.NoError(t, struc.Pack(b, wa))
+	t.Run("SendTo", func(t *testing.T) {
+		assert.NoError(t, wa.SendTo(b))
 	})
 
-	t.Run("UnmarshalBinary", func(t *testing.T) {
-		var aw wireAddr
-		assert.NoError(t, struc.Unpack(b, &aw))
-		assert.Equal(t, aw.ID(), wa.ID())
-		assert.Equal(t, aw.Network(), wa.Network())
-		assert.Equal(t, aw.Proto(), wa.Proto())
-		assert.Equal(t, aw.String(), wa.String())
+	t.Run("RecvFrom", func(t *testing.T) {
+		aw := new(wireAddr)
+		assert.NoError(t, aw.RecvFrom(b))
+		assertAddrEqual(t, wa, aw)
 	})
 }

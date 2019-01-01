@@ -87,7 +87,7 @@ func checkRemoteID(r io.Reader, id PeerID) func() error {
 
 func sendDialback(w io.Writer, a Addr) func() error {
 	return func() error {
-		return errors.Wrap(newWireAddr(a).Dump(w), "send dialback")
+		return errors.Wrap(newWireAddr(a).SendTo(w), "send dialback")
 	}
 }
 
@@ -102,6 +102,6 @@ func sendID(w io.Writer, id PeerID) func() error {
 
 func recvDialback(r io.Reader, a *wireAddr) func() error {
 	return func() error {
-		return errors.Wrap(a.Load(r), "recv dialback")
+		return errors.Wrap(a.RecvFrom(r), "recv dialback")
 	}
 }

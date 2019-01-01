@@ -26,8 +26,8 @@ func assertProperClosure(t *testing.T, c io.Closer) {
 func TestTransport(t *testing.T) {
 	transport := NewTransport(pipeTransport)
 
-	da := NewAddr(New(), inprocType.String(), "inproc", "/test/dialer")
-	la := NewAddr(New(), inprocType.String(), "inproc", "/test/listener")
+	da := NewAddr(New(), "", "inproc", "/test/dialer")
+	la := NewAddr(New(), "", "inproc", "/test/listener")
 
 	pl := transport.NewListener(la)
 	l, err := pl.Listen(context.Background())

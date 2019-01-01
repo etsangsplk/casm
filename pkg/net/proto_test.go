@@ -75,7 +75,7 @@ func TestProto(t *testing.T) {
 		a := addr{
 			PeerID:  New(),
 			proto:   "inproc",
-			network: inprocType.String(),
+			network: "",
 			addr:    "/test",
 		}
 		assert.NoError(t, struc.Pack(buf, newWireAddr(a)))
@@ -107,7 +107,7 @@ func TestProto(t *testing.T) {
 		a := addr{
 			PeerID:  New(),
 			proto:   "inproc",
-			network: inprocType.String(),
+			network: "",
 			addr:    "/test",
 		}
 
@@ -129,14 +129,14 @@ func TestProto(t *testing.T) {
 		da := addr{
 			PeerID:  New(),
 			proto:   "inproc",
-			network: inprocType.String(),
+			network: "",
 			addr:    "/test/alpha",
 		}
 
 		la := addr{
 			PeerID:  New(),
 			proto:   "inproc",
-			network: inprocType.String(),
+			network: "",
 			addr:    "/test/bravo",
 		}
 
@@ -164,14 +164,14 @@ func TestPipeConnUpgrader(t *testing.T) {
 	da := addr{
 		PeerID:  New(),
 		proto:   "inproc",
-		network: inprocType.String(),
+		network: "",
 		addr:    "/test/alpha",
 	}
 
 	la := addr{
 		PeerID:  New(),
 		proto:   "inproc",
-		network: inprocType.String(),
+		network: "",
 		addr:    "/test/bravo",
 	}
 
