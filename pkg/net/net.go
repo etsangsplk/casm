@@ -3,7 +3,6 @@ package net
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
@@ -48,7 +47,7 @@ func (p Path) String() string { return string(p) }
 // SendTo a specified writer in big-endian format.
 func (p Path) SendTo(w io.Writer) (err error) {
 	b := new(bytes.Buffer)
-	binary.Write(b, binary.BigEndian, p.lenHdr())
+	binary.Write(b, p.lenHdr())
 	b.WriteString(p.String())
 	_, err = io.Copy(w, b)
 	return
@@ -60,7 +59,7 @@ func (p *Path) RecvFrom(r io.Reader) (err error) {
 	var hdr uint16
 	b := new(bytes.Buffer)
 
-	if err = binary.Read(r, binary.BigEndian, &hdr); err != nil {
+	if err = binary.Read(r, &hdr); err != nil {
 		err = errors.Wrap(err, "read len")
 	} else if n, err = io.Copy(b, io.LimitReader(r, int64(hdr))); err != nil {
 		err = errors.Wrap(err, "read path")

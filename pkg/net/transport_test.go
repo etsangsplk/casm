@@ -2,7 +2,6 @@ package net
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
 	"testing"
 
@@ -113,11 +112,11 @@ func TestTransport(t *testing.T) {
 			defer assertProperClosure(t, s)
 
 			t.Run("Send", func(t *testing.T) {
-				assert.NoError(t, binary.Write(s, binary.BigEndian, uint8(255)))
+				assert.NoError(t, binary.Write(s, uint8(255)))
 			})
 			t.Run("Recv", func(t *testing.T) {
 				var res uint8
-				assert.NoError(t, binary.Read(s, binary.BigEndian, &res))
+				assert.NoError(t, binary.Read(s, &res))
 				assert.Equal(t, uint8(127), res)
 			})
 		})
@@ -130,11 +129,11 @@ func TestTransport(t *testing.T) {
 			defer assertProperClosure(t, s)
 
 			t.Run("Send", func(t *testing.T) {
-				assert.NoError(t, binary.Write(s, binary.BigEndian, uint8(127)))
+				assert.NoError(t, binary.Write(s, uint8(127)))
 			})
 			t.Run("Recv", func(t *testing.T) {
 				var res uint8
-				assert.NoError(t, binary.Read(s, binary.BigEndian, &res))
+				assert.NoError(t, binary.Read(s, &res))
 				assert.Equal(t, uint8(255), res)
 			})
 		})

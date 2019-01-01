@@ -2,7 +2,6 @@ package net
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"testing"
 
@@ -41,7 +40,7 @@ func TestPath(t *testing.T) {
 		t.Run("FailBody", func(t *testing.T) {
 			t.Run("EOF", func(t *testing.T) {
 				defer b.Reset()
-				binary.Write(b, binary.BigEndian, uint16(10))
+				binary.Write(b, uint16(10))
 
 				var p Path
 				assert.Error(t, p.RecvFrom(b))
@@ -53,7 +52,7 @@ func TestPath(t *testing.T) {
 					pr, pw := io.Pipe()
 					ch <- pr
 
-					binary.Write(pw, binary.BigEndian, uint16(10))
+					binary.Write(pw, uint16(10))
 					pw.CloseWithError(errors.New("fail"))
 				}()
 

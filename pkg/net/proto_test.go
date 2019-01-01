@@ -3,7 +3,6 @@ package net
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"net"
 	"testing"
 	"time"
@@ -56,14 +55,14 @@ func TestProto(t *testing.T) {
 	t.Run("CheckRemoteID", func(t *testing.T) {
 		t.Run("Match", func(t *testing.T) {
 			defer buf.Reset()
-			binary.Write(buf, binary.BigEndian, PeerID(1))
+			binary.Write(buf, PeerID(1))
 			fn := checkRemoteID(buf, PeerID(1))
 			assert.NoError(t, fn())
 		})
 
 		t.Run("NoMatch", func(t *testing.T) {
 			defer buf.Reset()
-			binary.Write(buf, binary.BigEndian, PeerID(1))
+			binary.Write(buf, PeerID(1))
 			fn := checkRemoteID(buf, PeerID(9))
 			assert.Error(t, fn())
 		})
@@ -97,7 +96,7 @@ func TestProto(t *testing.T) {
 		assert.NoError(t, fn())
 
 		var pid PeerID
-		assert.NoError(t, binary.Read(buf, binary.BigEndian, &pid))
+		assert.NoError(t, binary.Read(buf, &pid))
 		assert.Equal(t, PeerID(1), pid)
 	})
 
