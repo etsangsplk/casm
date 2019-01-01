@@ -2,8 +2,11 @@ package net
 
 import (
 	"bytes"
+	"encoding/binary"
+	"io"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,8 +23,50 @@ func TestPath(t *testing.T) {
 	})
 
 	t.Run("RecvFrom", func(t *testing.T) {
-		var p Path
-		assert.NoError(t, p.RecvFrom(b))
-		assert.Equal(t, s, p.String())
+		t.Run("Succeed", func(t *testing.T) {
+			defer b.Reset()
+
+			var p Path
+			assert.NoError(t, p.RecvFrom(b))
+			assert.Equal(t, s, p.String())
+		})
+
+		t.Run("FailLen", func(t *testing.T) {
+			defer b.Reset()
+
+			var p Path
+			assert.Error(t, p.RecvFrom(b))
+		})
+
+		t.Run("FailBody", func(t *testing.T) {
+			t.Run("EOF", func(t *testing.T) {
+				defer b.Reset()
+				binary.Write(b, binary.BigEndian, uint16(10))
+
+				var p Path
+				assert.Error(t, p.RecvFrom(b))
+			})
+
+			t.Run("GenericError", func(t *testing.T) {
+				ch := make(chan io.Reader, 1)
+				go func() {
+					pr, pw := io.Pipe()
+					ch <- pr
+
+					binary.Write(pw, binary.BigEndian, uint16(10))
+					pw.CloseWithError(errors.New("fail"))
+				}()
+
+				var p Path
+				assert.EqualError(t, p.RecvFrom(<-ch), "read path: fail")
+			})
+
+		})
 	})
+}
+
+func TestHandlerFunc(t *testing.T) {
+	var ok bool
+	HandlerFunc(func(*Stream) { ok = true }).Serve(nil)
+	assert.True(t, ok)
 }

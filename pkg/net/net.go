@@ -56,13 +56,16 @@ func (p Path) SendTo(w io.Writer) (err error) {
 
 // RecvFrom a specified reader and construct a Path.
 func (p *Path) RecvFrom(r io.Reader) (err error) {
+	var n int64
 	var hdr uint16
 	b := new(bytes.Buffer)
 
 	if err = binary.Read(r, binary.BigEndian, &hdr); err != nil {
 		err = errors.Wrap(err, "read len")
-	} else if _, err = io.Copy(b, io.LimitReader(r, int64(hdr))); err != nil {
+	} else if n, err = io.Copy(b, io.LimitReader(r, int64(hdr))); err != nil {
 		err = errors.Wrap(err, "read path")
+	} else if uint16(n) != hdr { // EOF not handled by io.Copy
+		err = errors.Wrap(io.EOF, "read path")
 	} else {
 		*p = Path(b.String())
 	}
