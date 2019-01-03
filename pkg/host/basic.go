@@ -138,6 +138,10 @@ func (bh basicHost) Open(a casm.Addresser, p string) (Stream, error) {
 */
 
 func (bh basicHost) Connect(c context.Context, a casm.Addresser) error {
+	if bh.a.ID() == a.Addr().ID() {
+		return errors.New("cannot connect to self")
+	}
+
 	if _, connected := bh.peers.Get(a.Addr()); connected {
 		return errors.Errorf("%s already connected", a.Addr().ID())
 	}
