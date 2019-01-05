@@ -6,7 +6,6 @@ import (
 
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
-	"github.com/pkg/errors"
 )
 
 // cxn is a logical connection to a remote peer.
@@ -49,29 +48,22 @@ type peerStore struct {
 
 func newPeerStore() *peerStore { return new(peerStore).Reset() }
 
-func (p *peerStore) Retrieve(id casm.IDer) (conn cxn, err error) {
-	var ok bool
-
+func (p *peerStore) Retrieve(id casm.IDer) (conn cxn, ok bool) {
 	p.RLock()
-	if conn, ok = p.m.Get(id.ID()); !ok {
-		err = errors.New("peer not found")
-	}
+	conn, ok = p.m.Get(id.ID())
 	p.RUnlock()
 
 	return
 }
 
-func (p *peerStore) Store(conn cxn) (err error) {
-	var drop bool
+func (p *peerStore) Store(conn cxn) (dropped bool) {
 
 	p.Lock()
-
-	if drop = p.m.Add(conn); drop {
+	if dropped = p.m.Add(conn); dropped {
 		conn.Close()
-		err = errors.New("peer already connected")
 	}
-
 	p.Unlock()
+
 	return
 }
 

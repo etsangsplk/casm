@@ -22,7 +22,7 @@ func main() {
 	log := log.New(log.OptLevel(log.DebugLevel))
 
 	h0 := host.New(host.OptLogger(log))
-	h0.Stream().Register("/echo", host.HandlerFunc(func(s host.Stream) {
+	h0.Register("/echo", host.HandlerFunc(func(s host.Stream) {
 		defer s.Close() // Users SHOULD close streams explicitly
 
 		b := make([]byte, 11)
@@ -45,11 +45,11 @@ func main() {
 
 	h1 := host.New(host.OptLogger(log))
 
-	if err := h0.ListenAndServe(c, addr0); err != nil {
+	if err := h0.Start(c, addr0); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := h1.ListenAndServe(c, addr1); err != nil {
+	if err := h1.Start(c, addr1); err != nil {
 		log.Fatal(err)
 	}
 
@@ -57,11 +57,11 @@ func main() {
 	defer cancel()
 
 	// Connect the hosts to each other
-	if err := h0.Network().Connect(connCtx, h1); err != nil {
+	if err := h0.Connect(connCtx, h1); err != nil {
 		log.Fatal(err)
 	}
 
-	s, err := h1.Stream().Open(h0, "/echo")
+	s, err := h1.Open(h0, "/echo")
 	if err != nil {
 		log.Fatal(err)
 	}

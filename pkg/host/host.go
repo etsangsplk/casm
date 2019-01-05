@@ -12,6 +12,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	// ErrAlreadyConnected indicates that a connection attempt failed because
+	// a connection to the remote Host already exists.
+	ErrAlreadyConnected = errors.New("already connected")
+)
+
 // Host is a logical machine in a compute cluster.  It acts both as a server and
 // a client.
 type Host struct {
@@ -94,13 +100,12 @@ func (h Host) startAccepting(c context.Context, l *net.Listener) {
 			return
 		}
 
-		if err = h.peers.Store(conn); err != nil {
-			h.log().WithError(err).Debug("closed peer connection")
+		if !h.peers.Store(conn) {
+			h.log().WithField("error", "already connected").Debug("closed connection")
 			return
 		}
 
 		go h.handle(c, h.bindConnLogger(conn))
-		log.Get(conn.Context()).Debug("connection accepted")
 	}
 }
 
@@ -112,18 +117,23 @@ func (h Host) bindConnLogger(conn *net.Conn) *net.Conn {
 }
 
 func (h Host) handle(c context.Context, conn *net.Conn) {
+	log.Get(conn.Context()).Debug("connected")
 	defer h.Disconnect(conn.RemoteAddr())
 
 	var err error
 	var s *net.Stream
 	for range ctx.Tick(ctx.Link(c, conn.Context())) {
 		if s, err = conn.AcceptStream(); err != nil {
-			h.log().WithError(err).Warn("failed to accept stream")
+			select {
+			case <-c.Done():
+			case <-conn.Context().Done():
+			default:
+				h.log().WithError(err).Error("failed to accept stream")
+			}
 			return
 		}
 
 		go handleStream(h, h.bindStreamLogger(s))
-		log.Get(s.Context()).Debug("stream accepted")
 	}
 }
 
@@ -138,6 +148,8 @@ func (h Host) bindStreamLogger(s *net.Stream) *net.Stream {
 }
 
 func handleStream(h Handler, s *net.Stream) {
+	log.Get(s.Context()).Debug("stream accepted")
+
 	var p streamPath
 	if err := p.RecvFrom(s); err != nil {
 		log.Get(s.Context()).WithError(err).Debug("failed to read path")
@@ -148,9 +160,9 @@ func handleStream(h Handler, s *net.Stream) {
 
 // Open a stream. The peer must already be connected.
 func (h Host) Open(a casm.Addresser, path string) (Stream, error) {
-	conn, err := h.peers.Retrieve(a.Addr())
-	if err != nil {
-		return nil, err
+	conn, ok := h.peers.Retrieve(a.Addr())
+	if !ok {
+		return nil, errors.New("peer not found")
 	}
 
 	s, err := conn.OpenStream()
@@ -187,7 +199,7 @@ func (h Host) Connect(c context.Context, a casm.Addresser) error {
 	case h.a.ID() == a.Addr().ID():
 		return errors.New("cannot connect to self")
 	case h.peers.Contains(a.Addr()):
-		return errors.New("peer already connected")
+		return ErrAlreadyConnected
 	default:
 		conn, err := h.dialAndStore(c, a.Addr())
 		if err != nil {
@@ -195,7 +207,6 @@ func (h Host) Connect(c context.Context, a casm.Addresser) error {
 		}
 
 		go h.handle(c, conn)
-		log.Get(conn.Context()).Debugf("connected to peer")
 
 		return nil
 	}
@@ -207,8 +218,8 @@ func (h Host) dialAndStore(c context.Context, a net.Addr) (*net.Conn, error) {
 		return nil, errors.Wrap(err, "dial")
 	}
 
-	if err := h.peers.Store(conn); err != nil {
-		return nil, err
+	if !h.peers.Store(conn) {
+		return nil, ErrAlreadyConnected
 	}
 
 	return h.bindConnLogger(conn), nil
