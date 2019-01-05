@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"io"
 
 	"github.com/SentimensRG/ctx"
 	casm "github.com/lthibault/casm/pkg"
@@ -40,7 +41,7 @@ func (bh *basicHost) ListenAndServe(c context.Context, a net.Addr) error {
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-	ctx.Defer(c, func() { l.Close() })
+	ctx.Defer(c, bh.halter(l))
 
 	go bh.startAccepting(c, l)
 
@@ -49,13 +50,28 @@ func (bh *basicHost) ListenAndServe(c context.Context, a net.Addr) error {
 
 }
 
+func (bh basicHost) halter(c io.Closer) func() {
+	return func() {
+		if err := c.Close(); err != nil {
+			bh.log().WithError(err).Fatal("unclean shutdown")
+		} else {
+			bh.log().Warn("halted")
+		}
+	}
+}
+
 func (bh basicHost) startAccepting(c context.Context, l *net.Listener) {
 	var err error
 	var conn *net.Conn
 
 	for range ctx.Tick(c) {
 		if conn, err = l.Accept(); err != nil {
-			bh.log().WithError(err).Warn("failed to accept conn")
+			select {
+			case <-c.Done():
+			default:
+				bh.log().WithError(err).Warn("failed to accept conn")
+			}
+
 			return
 		}
 
