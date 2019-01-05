@@ -219,7 +219,7 @@ func (h Host) dialAndStore(c context.Context, a net.Addr) (*net.Conn, error) {
 	}
 
 	if h.peers.StoreOrClose(conn) {
-		return nil, ErrAlreadyConnected
+		return nil, errors.Wrap(ErrAlreadyConnected, "dial")
 	}
 
 	return h.bindConnLogger(conn), nil
