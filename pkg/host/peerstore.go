@@ -19,47 +19,47 @@ type cxn interface {
 	WithContext(context.Context) *net.Conn
 }
 
-type peerMap map[net.PeerID]cxn
+type cxnTable map[net.PeerID]cxn
 
-func (m peerMap) Add(conn cxn) bool {
+func (t cxnTable) Add(conn cxn) (added bool) {
 	id := conn.RemoteAddr().ID()
-	if _, ok := m.Get(id); ok {
+	if _, ok := t.Get(id); ok {
 		return false
 	}
-	m[id] = conn
+	t[id] = conn
 	return true
 }
 
-func (m peerMap) Get(id net.PeerID) (c cxn, ok bool) {
-	c, ok = m[id]
+func (t cxnTable) Get(id net.PeerID) (c cxn, found bool) {
+	c, found = t[id]
 	return
 }
 
-func (m peerMap) Del(id net.PeerID) (conn cxn, ok bool) {
-	conn, ok = m[id]
-	delete(m, id)
+func (t cxnTable) Del(id net.PeerID) (conn cxn, found bool) {
+	conn, found = t[id]
+	delete(t, id)
 	return
 }
 
 type peerStore struct {
 	sync.RWMutex
-	m peerMap
+	t cxnTable
 }
 
 func newPeerStore() *peerStore { return new(peerStore).Reset() }
 
-func (p *peerStore) Retrieve(id casm.IDer) (conn cxn, ok bool) {
+func (p *peerStore) Retrieve(id casm.IDer) (conn cxn, found bool) {
 	p.RLock()
-	conn, ok = p.m.Get(id.ID())
+	conn, found = p.t.Get(id.ID())
 	p.RUnlock()
 
 	return
 }
 
-func (p *peerStore) Store(conn cxn) (dropped bool) {
+func (p *peerStore) StoreOrClose(conn cxn) (stored bool) {
 
 	p.Lock()
-	if dropped = p.m.Add(conn); dropped {
+	if stored = p.t.Add(conn); !stored {
 		conn.Close()
 	}
 	p.Unlock()
@@ -67,24 +67,24 @@ func (p *peerStore) Store(conn cxn) (dropped bool) {
 	return
 }
 
-func (p *peerStore) Drop(id casm.IDer) {
+func (p *peerStore) DropAndClose(id casm.IDer) {
 	p.Lock()
-	if conn, ok := p.m.Del(id.ID()); ok {
+	if conn, ok := p.t.Del(id.ID()); ok {
 		conn.Close()
 	}
 	p.Unlock()
 }
 
-func (p *peerStore) Contains(id casm.IDer) (contained bool) {
+func (p *peerStore) Contains(id casm.IDer) (found bool) {
 	p.RLock()
-	_, contained = p.m.Get(id.ID())
+	_, found = p.t.Get(id.ID())
 	p.RUnlock()
 	return
 }
 
 func (p *peerStore) Reset() *peerStore {
 	p.Lock()
-	p.m = make(map[net.PeerID]cxn)
+	p.t = make(map[net.PeerID]cxn)
 	p.Unlock()
 	return p
 }

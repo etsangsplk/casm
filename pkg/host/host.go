@@ -100,7 +100,7 @@ func (h Host) startAccepting(c context.Context, l *net.Listener) {
 			return
 		}
 
-		if !h.peers.Store(conn) {
+		if h.peers.StoreOrClose(conn) {
 			h.log().WithField("error", "already connected").Debug("closed connection")
 			return
 		}
@@ -218,7 +218,7 @@ func (h Host) dialAndStore(c context.Context, a net.Addr) (*net.Conn, error) {
 		return nil, errors.Wrap(err, "dial")
 	}
 
-	if !h.peers.Store(conn) {
+	if h.peers.StoreOrClose(conn) {
 		return nil, ErrAlreadyConnected
 	}
 
@@ -226,4 +226,4 @@ func (h Host) dialAndStore(c context.Context, a net.Addr) (*net.Conn, error) {
 }
 
 // Disconnect from a remote host.
-func (h Host) Disconnect(id casm.IDer) { h.peers.Drop(id) }
+func (h Host) Disconnect(id casm.IDer) { h.peers.DropAndClose(id) }
