@@ -53,11 +53,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	connCtx, cancel := context.WithTimeout(c, timeout)
-	defer cancel()
-
 	// Connect the hosts to each other
-	if err := h0.Connect(connCtx, h1); err != nil {
+	if err := h0.Connect(c, h1); err != nil {
 		log.Fatal(err)
 	}
 
