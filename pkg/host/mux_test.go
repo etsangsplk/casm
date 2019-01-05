@@ -22,18 +22,18 @@ func TestPath(t *testing.T) {
 	s := "hello, world!"
 
 	t.Run("LenHdr", func(t *testing.T) {
-		assert.Equal(t, uint16(13), path(s).lenHdr())
+		assert.Equal(t, uint16(13), streamPath(s).lenHdr())
 	})
 
 	t.Run("SendTo", func(t *testing.T) {
-		assert.NoError(t, path(s).SendTo(b))
+		assert.NoError(t, streamPath(s).SendTo(b))
 	})
 
 	t.Run("RecvFrom", func(t *testing.T) {
 		t.Run("Succeed", func(t *testing.T) {
 			defer b.Reset()
 
-			var p path
+			var p streamPath
 			assert.NoError(t, p.RecvFrom(b))
 			assert.Equal(t, s, p.String())
 		})
@@ -41,7 +41,7 @@ func TestPath(t *testing.T) {
 		t.Run("FailLen", func(t *testing.T) {
 			defer b.Reset()
 
-			var p path
+			var p streamPath
 			assert.Error(t, p.RecvFrom(b))
 		})
 
@@ -50,7 +50,7 @@ func TestPath(t *testing.T) {
 				defer b.Reset()
 				binary.Write(b, binary.BigEndian, uint16(10))
 
-				var p path
+				var p streamPath
 				assert.Error(t, p.RecvFrom(b))
 			})
 
@@ -64,7 +64,7 @@ func TestPath(t *testing.T) {
 					pw.CloseWithError(errors.New("fail"))
 				}()
 
-				var p path
+				var p streamPath
 				assert.EqualError(t, p.RecvFrom(<-ch), "read path: fail")
 			})
 

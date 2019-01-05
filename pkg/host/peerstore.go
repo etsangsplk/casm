@@ -6,10 +6,12 @@ import (
 
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
+	"github.com/pkg/errors"
 )
 
 // cxn is a logical connection to a remote peer.
 type cxn interface {
+	Context() context.Context
 	Close() error
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
@@ -18,38 +20,79 @@ type cxn interface {
 	WithContext(context.Context) *net.Conn
 }
 
-type peerStore struct {
-	sync.RWMutex
-	m map[net.PeerID]cxn
-}
+type peerMap map[net.PeerID]cxn
 
-func newPeerStore() *peerStore {
-	return &peerStore{m: make(map[net.PeerID]cxn)}
-}
-
-func (p *peerStore) Add(conn cxn) bool {
-	p.Lock()
-	defer p.Unlock()
-
+func (m peerMap) Add(conn cxn) bool {
 	id := conn.RemoteAddr().ID()
-	if _, ok := p.m[id]; ok {
+	if _, ok := m.Get(id); ok {
 		return false
 	}
-	p.m[id] = conn
+	m[id] = conn
 	return true
 }
 
-func (p *peerStore) Get(id casm.IDer) (c cxn, ok bool) {
+func (m peerMap) Get(id net.PeerID) (c cxn, ok bool) {
+	c, ok = m[id]
+	return
+}
+
+func (m peerMap) Del(id net.PeerID) (conn cxn, ok bool) {
+	conn, ok = m[id]
+	delete(m, id)
+	return
+}
+
+type peerStore struct {
+	sync.RWMutex
+	m peerMap
+}
+
+func newPeerStore() *peerStore { return new(peerStore).Reset() }
+
+func (p *peerStore) Retrieve(id casm.IDer) (conn cxn, err error) {
+	var ok bool
+
 	p.RLock()
-	c, ok = p.m[id.ID()]
+	if conn, ok = p.m.Get(id.ID()); !ok {
+		err = errors.New("peer not found")
+	}
+	p.RUnlock()
+
+	return
+}
+
+func (p *peerStore) Store(conn cxn) (err error) {
+	var drop bool
+
+	p.Lock()
+
+	if drop = p.m.Add(conn); drop {
+		conn.Close()
+		err = errors.New("peer already connected")
+	}
+
+	p.Unlock()
+	return
+}
+
+func (p *peerStore) Drop(id casm.IDer) {
+	p.Lock()
+	if conn, ok := p.m.Del(id.ID()); ok {
+		conn.Close()
+	}
+	p.Unlock()
+}
+
+func (p *peerStore) Contains(id casm.IDer) (contained bool) {
+	p.RLock()
+	_, contained = p.m.Get(id.ID())
 	p.RUnlock()
 	return
 }
 
-func (p *peerStore) Del(id casm.IDer) (conn cxn, ok bool) {
+func (p *peerStore) Reset() *peerStore {
 	p.Lock()
-	conn, ok = p.m[id.ID()]
-	delete(p.m, id.ID())
+	p.m = make(map[net.PeerID]cxn)
 	p.Unlock()
-	return
+	return p
 }

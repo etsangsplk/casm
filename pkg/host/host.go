@@ -3,54 +3,216 @@ package host
 
 import (
 	"context"
+	"io"
 
-	tcp "github.com/lthibault/pipewerks/pkg/transport/tcp"
-
+	"github.com/SentimensRG/ctx"
 	casm "github.com/lthibault/casm/pkg"
 	net "github.com/lthibault/casm/pkg/net"
+	log "github.com/lthibault/log/pkg"
+	"github.com/pkg/errors"
 )
 
-// Network manages raw connections
-type Network interface {
-	Connect(context.Context, casm.Addresser) error
-	Disconnect(casm.IDer)
-}
-
-// StreamManager manages streams, which are multiplexed on top of raw connections
-type StreamManager interface {
-	Register(string, Handler)
-	Unregister(string)
-	Open(casm.Addresser, string) (Stream, error)
-}
-
 // Host is a logical machine in a compute cluster.  It acts both as a server and
-// a client.  In the CASM expander-graph model, it is a vertex.
-type Host interface {
-	Addr() net.Addr
-	Network() Network
-	Stream() StreamManager
-	ListenAndServe(context.Context, net.Addr) error
-}
+// a client.
+type Host struct {
+	l log.Logger
 
-func setDefaultOpts(opt []Option) []Option {
-	return append(
-		[]Option{
-			OptTransport(net.NewTransport(tcp.New())),
-			OptLogger(nil),
-		},
-		opt...,
-	)
+	a net.Addr
+	t *net.Transport
+
+	*streamMux
+	peers *peerStore
 }
 
 // New Host.  Pass options to override defaults.
-func New(opt ...Option) Host {
-	bh := new(basicHost)
+func New(opt ...Option) *Host {
+	h := new(Host)
 
 	for _, fn := range setDefaultOpts(opt) {
-		fn(bh)
+		fn(h)
 	}
 
-	bh.streamMux = newStreamMux(bh.l.WithLocus("mux"))
-	bh.peers = newPeerStore()
-	return bh
+	h.streamMux = newStreamMux(h.l.WithLocus("mux"))
+	h.peers = newPeerStore()
+	return h
 }
+
+func (h Host) log() log.Logger {
+	return h.l.WithFields(log.F{
+		"id":         h.a.ID(),
+		"local_peer": h.a,
+	})
+}
+
+// Addr where the host can be reached
+func (h Host) Addr() net.Addr { return h.a }
+
+// Start the Host
+func (h *Host) Start(c context.Context, a net.Addr) error {
+	h.a = a // assign listen address
+
+	c = log.Set(c, h.log().WithLocus("listener"))
+
+	l, err := h.t.NewListener(a).Listen(c)
+	if err != nil {
+		return errors.Wrap(err, "listen")
+	}
+	ctx.Defer(c, h.halter(l))
+
+	go h.startAccepting(c, l)
+
+	h.log().Info("started host")
+	return nil
+
+}
+
+func (h Host) halter(c io.Closer) func() {
+	return func() {
+		if err := c.Close(); err != nil {
+			h.log().WithError(err).Fatal("unclean shutdown")
+		} else {
+			h.log().Warn("halted")
+		}
+
+		h.a = nil
+		h.peers.Reset()
+	}
+}
+
+func (h Host) startAccepting(c context.Context, l *net.Listener) {
+	var err error
+	var conn *net.Conn
+
+	for range ctx.Tick(c) {
+		if conn, err = l.Accept(); err != nil {
+			select {
+			case <-c.Done():
+			default:
+				h.log().WithError(err).Warn("failed to accept conn")
+			}
+
+			return
+		}
+
+		if err = h.peers.Store(conn); err != nil {
+			h.log().WithError(err).Debug("closed peer connection")
+			return
+		}
+
+		go h.handle(c, h.bindConnLogger(conn))
+		log.Get(conn.Context()).Debug("connection accepted")
+	}
+}
+
+func (h Host) bindConnLogger(conn *net.Conn) *net.Conn {
+	return conn.WithContext(log.Set(
+		conn.Context(),
+		h.log().WithField("remote_peer", conn.RemoteAddr()),
+	))
+}
+
+func (h Host) handle(c context.Context, conn *net.Conn) {
+	defer h.Disconnect(conn.RemoteAddr())
+
+	var err error
+	var s *net.Stream
+	for range ctx.Tick(ctx.Link(c, conn.Context())) {
+		if s, err = conn.AcceptStream(); err != nil {
+			h.log().WithError(err).Warn("failed to accept stream")
+			return
+		}
+
+		go handleStream(h, h.bindStreamLogger(s))
+		log.Get(s.Context()).Debug("stream accepted")
+	}
+}
+
+func (h Host) bindStreamLogger(s *net.Stream) *net.Stream {
+	return s.WithContext(log.Set(
+		s.Context(),
+		h.log().WithFields(log.F{
+			"remote_peer": s.RemoteAddr(),
+			"stream":      s.StreamID()},
+		)),
+	)
+}
+
+func handleStream(h Handler, s *net.Stream) {
+	var p streamPath
+	if err := p.RecvFrom(s); err != nil {
+		log.Get(s.Context()).WithError(err).Debug("failed to read path")
+	}
+
+	h.Serve(stream{path: p.String(), Stream: s})
+}
+
+// Open a stream. The peer must already be connected.
+func (h Host) Open(a casm.Addresser, path string) (Stream, error) {
+	conn, err := h.peers.Retrieve(a.Addr())
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := conn.OpenStream()
+	if err != nil {
+		return nil, errors.Wrap(err, "open stream")
+	}
+
+	if err = streamPath(path).SendTo(s); err != nil {
+		return nil, errors.Wrap(err, "write path")
+	}
+
+	return h.bindStream(s, path), nil
+}
+
+func (h Host) bindStream(s *net.Stream, path string) stream {
+	return stream{
+		path: path,
+		Stream: s.WithContext(log.Set(
+			s.Context(),
+			h.log().WithFields(log.F{"stream": s.StreamID(), "path": path}),
+		)),
+	}
+}
+
+/*
+	Implement Network
+*/
+
+// Connect to a remote host.
+func (h Host) Connect(c context.Context, a casm.Addresser) error {
+	switch {
+	case h.a == nil:
+		return errors.New("host not started")
+	case h.a.ID() == a.Addr().ID():
+		return errors.New("cannot connect to self")
+	case h.peers.Contains(a.Addr()):
+		return errors.New("peer already connected")
+	default:
+		conn, err := h.dialAndStore(c, a.Addr())
+		if err != nil {
+			return err
+		}
+
+		go h.handle(c, conn)
+		log.Get(conn.Context()).Debugf("connected to peer")
+
+		return nil
+	}
+}
+
+func (h Host) dialAndStore(c context.Context, a net.Addr) (*net.Conn, error) {
+	conn, err := h.t.NewDialer(h.a).Dial(c, a.Addr())
+	if err != nil {
+		return nil, errors.Wrap(err, "dial")
+	}
+
+	if err := h.peers.Store(conn); err != nil {
+		return nil, err
+	}
+
+	return h.bindConnLogger(conn), nil
+}
+
+// Disconnect from a remote host.
+func (h Host) Disconnect(id casm.IDer) { h.peers.Drop(id) }

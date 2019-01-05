@@ -17,43 +17,24 @@ var (
 
 func TestHost(t *testing.T) {
 	transpt := net.NewTransport(inproc.New())
-	var h *basicHost
+	var h *Host
 
 	c, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	t.Run("ListenAndServe", func(t *testing.T) {
+	t.Run("Start", func(t *testing.T) {
 		h = New(
 			OptTransport(transpt),
 			OptLogger(log.New(log.OptLevel(log.NullLevel))),
-		).(*basicHost)
+		)
 
 		assert.NotNil(t, h.l)
-		assert.NoError(t, h.ListenAndServe(c, a))
+		assert.NoError(t, h.Start(c, a))
 		assert.NotNil(t, h.a)
 	})
 
-	t.Run("Network", func(t *testing.T) {
+	// t.Run("Network", func(t *testing.T) {
 
-		t.Run("Connect", func(t *testing.T) {
-			t.Run("Self", func(t *testing.T) {
-				assert.Error(t, h.Network().Connect(c, a))
-			})
-
-			t.Run("Existing", func(t *testing.T) {
-				conn := mockConn{remote: db}
-
-				h.peers.Add(conn)
-				defer h.peers.Del(db)
-
-				assert.Error(t, h.Network().Connect(c, db))
-			})
-
-			t.Run("Valid", func(t *testing.T) {
-				// TODO
-			})
-		})
-
-	})
+	// })
 
 }

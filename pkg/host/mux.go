@@ -44,14 +44,14 @@ type HandlerFunc func(Stream)
 func (h HandlerFunc) Serve(s Stream) { h(s) }
 
 // path to a stream
-type path string
+type streamPath string
 
-func (p path) lenHdr() uint16 { return uint16(len(p)) }
+func (p streamPath) lenHdr() uint16 { return uint16(len(p)) }
 
-func (p path) String() string { return string(p) }
+func (p streamPath) String() string { return string(p) }
 
 // SendTo a specified writer in big-endian format.
-func (p path) SendTo(w io.Writer) (err error) {
+func (p streamPath) SendTo(w io.Writer) (err error) {
 	b := new(bytes.Buffer)
 	binary.Write(b, binary.BigEndian, p.lenHdr())
 	b.WriteString(p.String())
@@ -60,7 +60,7 @@ func (p path) SendTo(w io.Writer) (err error) {
 }
 
 // RecvFrom a specified reader and construct a path.
-func (p *path) RecvFrom(r io.Reader) (err error) {
+func (p *streamPath) RecvFrom(r io.Reader) (err error) {
 	var n int64
 	var hdr uint16
 	b := new(bytes.Buffer)
@@ -72,7 +72,7 @@ func (p *path) RecvFrom(r io.Reader) (err error) {
 	} else if uint16(n) != hdr { // EOF not handled by io.Copy
 		err = errors.Wrap(io.EOF, "read path")
 	} else {
-		*p = path(b.String())
+		*p = streamPath(b.String())
 	}
 
 	return
