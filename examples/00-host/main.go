@@ -68,11 +68,9 @@ func main() {
 	}
 
 	b := make([]byte, 11)
-	log.Warn("****")
 	if _, err = s.Read(b); err != nil {
 		log.Fatal(err)
 	}
-	log.Warn("----")
 
 	fmt.Println(string(b))
 }
