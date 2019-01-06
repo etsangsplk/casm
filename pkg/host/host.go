@@ -100,8 +100,8 @@ func (h Host) startAccepting(c context.Context, l *net.Listener) {
 			return
 		}
 
-		if h.peers.StoreOrClose(conn) {
-			h.log().WithField("error", "already connected").Debug("closed connection")
+		if !h.peers.StoreOrClose(conn) {
+			h.log().WithError(ErrAlreadyConnected).Debug("closed connection")
 			return
 		}
 
